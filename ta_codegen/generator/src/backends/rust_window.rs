@@ -151,6 +151,173 @@ pub(crate) fn plan(cond: &Expr, body: &[Statement], update: Option<&Statement>, 
     })
 }
 
+
+struct CollectiveOutput<'a> {
+    array: &'a str,
+    index: &'a str,
+    inline: &'a dyn Fn(&str, &[Expr]) -> Option<Expr>,
+    sites: usize,
+}
+impl CollectiveOutput<'_> {
+    fn forbidden(&self, n: &str) -> bool {
+        n == self.array || n == self.index || n == TRIP || n == PASS
+            || n.strip_prefix("_w").is_some_and(|j| !j.is_empty() && j.bytes().all(|b| b.is_ascii_digit()))
+    }
+
+    fn expression(&self, e: &Expr, depth: usize) -> Option<()> {
+        if depth > 32 { return None; }
+        match e {
+            Expr::Literal(_) | Expr::IntLiteral(_) => Some(()),
+            Expr::Var(n) if !self.forbidden(n) => Some(()),
+            Expr::ArrayAccess(a, i) if !self.forbidden(a) => self.expression(i, depth + 1),
+            Expr::BinOp(l, _, r) => { self.expression(l, depth + 1)?; self.expression(r, depth + 1) }
+            Expr::Cast(_, inner) | Expr::Not(inner) | Expr::Neg(inner) | Expr::BitwiseNot(inner) => self.expression(inner, depth + 1),
+            Expr::Ternary(c, yes, no) => {
+                self.expression(c, depth + 1)?;
+                self.expression(yes, depth + 1)?;
+                self.expression(no, depth + 1)
+            }
+            Expr::FuncCall(n, args) => {
+                for arg in args { self.expression(arg, depth + 1)?; }
+                if eager_call(n) { Some(()) }
+                else { self.expression(&(self.inline)(n, args)?, depth + 1) }
+            }
+            _ => None,
+        }
+    }
+
+    fn paths(&mut self, body: &[Statement], depth: usize) -> Option<BTreeSet<u8>> {
+        if depth > 32 { return None; }
+        let mut counts = BTreeSet::from([0u8]);
+        for s in body {
+            let next = match s {
+                Statement::Comment(_) => BTreeSet::from([0]),
+                Statement::Assign { target: t @ Expr::ArrayAccess(a, _), value, compound: false }
+                    if a == self.array && post_increment(t) == Some(self.index) => {
+                    self.expression(value, 0)?;
+                    self.sites += 1;
+                    BTreeSet::from([1])
+                }
+                Statement::Assign { target: Expr::Var(n), value, .. } => {
+                    self.expression(&var(n), 0)?;
+                    self.expression(value, 0)?;
+                    BTreeSet::from([0])
+                }
+                Statement::Expr(e) => { self.expression(e, 0)?; BTreeSet::from([0]) }
+                Statement::If { condition, then_body, else_body, .. } => {
+                    self.expression(condition, 0)?;
+                    let mut arms = self.paths(then_body, depth + 1)?;
+                    arms.extend(self.paths(else_body, depth + 1)?);
+                    arms
+                }
+                _ => return None,
+            };
+            let mut sums = BTreeSet::new();
+            for a in &counts {
+                for b in &next {
+                    let sum = a + b;
+                    if sum > 1 { return None; }
+                    sums.insert(sum);
+                }
+            }
+            counts = sums;
+        }
+        Some(counts)
+    }
+}
+
+fn first_output<'a>(body: &'a [Statement], output: &dyn Fn(&str) -> bool, depth: usize) -> Option<(&'a str, &'a str)> {
+    if depth > 32 { return None; }
+    for s in body {
+        match s {
+            Statement::Assign { target: t @ Expr::ArrayAccess(a, _), .. } if output(a) => {
+                return Some((a, post_increment(t)?));
+            }
+            Statement::If { then_body, else_body, .. } => {
+                if let Some(pair) = first_output(then_body, output, depth + 1)
+                    .or_else(|| first_output(else_body, output, depth + 1)) {
+                    return Some(pair);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// One real store on every path through four stateful output leaves.
+pub(crate) fn collective_output_plan(
+    cond: &Expr,
+    body: &[Statement],
+    names: &Names,
+    real_output: &dyn Fn(&str) -> bool,
+    inline: &dyn Fn(&str, &[Expr]) -> Option<Expr>,
+) -> Option<Plan> {
+    // Unlike the generic planner this family admits no nested-loop unrolling.
+    fn pass(body: &[Statement]) -> Option<Vec<Statement>> {
+        let mut out = Vec::new();
+        for s in body {
+            match s {
+                Statement::Block { body } => out.extend(pass(body)?),
+                Statement::If { condition, then_body, else_body, cond_comments } => out.push(Statement::If {
+                    condition: condition.clone(), then_body: pass(then_body)?, else_body: pass(else_body)?, cond_comments: cond_comments.clone(),
+                }),
+                Statement::Assign { .. } | Statement::Expr(_) | Statement::Comment(_) => out.push(s.clone()),
+                _ => return None,
+            }
+        }
+        Some(out)
+    }
+    let form = form(cond, names)?;
+    if form.step != 1 || form.cond_step.is_some() || form.may_pass_unguarded {
+        return None;
+    }
+    let pass = pass(body)?;
+    if mentions_reserved(cond, &pass) { return None; }
+    let facts = Facts::of(&pass);
+    let steps: BTreeMap<String, i64> = facts.induction().into_iter().filter(|(v, _)| (names.index)(v)).collect();
+    if steps.get(&form.counter) != Some(&1) || !invariant(&form.bound, &facts) {
+        return None;
+    }
+    let (array, index) = first_output(&pass, real_output, 0)?;
+    if index == form.counter || !(names.index)(index) || !(names.sliceable)(array) {
+        return None;
+    }
+    let mut proof = CollectiveOutput { array, index, inline, sites: 0 };
+    proof.expression(cond, 0)?;
+    if proof.paths(&pass, 0)? != BTreeSet::from([1]) || proof.sites != 4 {
+        return None;
+    }
+    let analysis = Analysis { steps: &steps, facts: &facts, names, branches: true };
+    let occurrences = analysis.occurrences(&pass);
+    let prefix_read = |o: &Occ| {
+        o.every && o.index == var(&form.counter) && o.offset == 0
+            && o.elem.as_ref().is_some_and(|(group, at)| group.var == form.counter && group.inv.is_empty() && *at == 0)
+    };
+    let inputs: BTreeSet<String> = occurrences.iter().filter(|o| {
+        (names.same_len)(&o.array) && prefix_read(o)
+            && occurrences.iter().filter(|other| other.array == o.array).all(prefix_read)
+    }).map(|o| o.array.clone()).collect();
+    let mut windows = vec![Window { array: array.into(), mutable: true, start: var(index), extra: 0 }];
+    windows.extend(inputs.iter().map(|a| Window { array: a.clone(), mutable: false, start: var(&form.counter), extra: 0 }));
+    let assignments: Vec<Option<(usize, i64)>> = occurrences.iter().map(|o| {
+        if o.array == array { Some((0, 0)) }
+        else { inputs.iter().position(|a| *a == o.array).map(|i| (i + 1, 0)) }
+    }).collect();
+    let mut next = 0;
+    let body = rewrite(&pass, &assignments, &mut next);
+    Some(Plan {
+        guard: form.guard,
+        trip: form.trip,
+        windows,
+        reverse: false,
+        body,
+        cond_step: None,
+        may_pass_unguarded: false,
+        checked: true,
+    })
+}
+
 fn step(v: &str, d: i64) -> Statement {
     let op = if d > 0 { BinOp::Add } else { BinOp::Sub };
     Statement::Assign { target: var(v), value: bin(var(v), op, int(1)), compound: true }
@@ -1428,5 +1595,311 @@ mod tests {
         }
         let body = [set(at("out", v("k")), v("_windowStart")), inc("i"), inc("k")];
         assert!(run(&lt, &body).is_some());
+    }
+}
+
+#[cfg(test)]
+mod collective_output_tests {
+    use super::*;
+
+    fn at(a: &str, i: Expr) -> Expr { Expr::ArrayAccess(a.into(), Box::new(i)) }
+    fn store(value: Expr) -> Statement {
+        Statement::Assign { target: at("out", Expr::PostIncrement(Box::new(var("k")))), value, compound: false }
+    }
+    fn branch(yes: Vec<Statement>, no: Vec<Statement>) -> Statement {
+        Statement::If { condition: bin(var("s"), BinOp::Greater, int(0)), then_body: yes, else_body: no, cond_comments: vec![] }
+    }
+    fn four_leaves() -> Vec<Statement> {
+        let leaf = || vec![
+            Statement::Assign { target: var("s"), value: bin(var("s"), BinOp::Add, at("in", var("i"))), compound: false },
+            store(var("s")),
+            Statement::Assign { target: var("s"), value: Expr::Neg(Box::new(var("s"))), compound: false },
+        ];
+        vec![step("i", 1), branch(vec![branch(leaf(), leaf())], vec![branch(leaf(), leaf())])]
+    }
+    fn run(body: &[Statement]) -> Option<Plan> {
+        let index = |n: &str| ["i", "k", "e"].contains(&n);
+        let names = Names {
+            index: &index,
+            usize_expr: &|e| matches!(e, Expr::IntLiteral(_) | Expr::Var(_)),
+            castable: &|_| false,
+            sliceable: &|_| true,
+            same_len: &|_| false,
+            ring_storage: &|_| None,
+        };
+        collective_output_plan(&bin(var("i"), BinOp::LessEq, var("e")), body, &names, &|n| n == "out", &|n, args| {
+            (n == "identity" && args.len() == 1).then(|| args[0].clone())
+        })
+    }
+
+    #[test]
+    fn collective_store_keeps_state_and_every_branch_and_output_increment() {
+        fn increments(body: &[Statement]) -> usize {
+            body.iter().map(|s| match s {
+                Statement::If { then_body, else_body, .. } => increments(then_body) + increments(else_body),
+                s => usize::from(as_step(s) == Some(("k", 1))),
+            }).sum()
+        }
+        fn restore(body: &[Statement]) -> Vec<Statement> {
+            let mut out = Vec::new();
+            let mut iter = body.iter();
+            while let Some(s) = iter.next() {
+                let restored = match s {
+                    Statement::If { condition, then_body, else_body, cond_comments } => Statement::If {
+                        condition: condition.clone(), then_body: restore(then_body), else_body: restore(else_body), cond_comments: cond_comments.clone(),
+                    },
+                    Statement::Assign { target: Expr::ArrayAccess(a, i), value, compound: false }
+                        if a == "out" && render_marker(i).as_deref() == Some("_w0[_wk]") => {
+                        assert_eq!(iter.next().and_then(as_step), Some(("k", 1)));
+                        store(value.clone())
+                    }
+                    other => other.clone(),
+                };
+                out.push(restored);
+            }
+            out
+        }
+        let body = four_leaves();
+        let p = run(&body).expect("four complete stateful leaves");
+        assert!(p.checked && !p.reverse && p.cond_step.is_none());
+        assert_eq!(p.windows.len(), 1);
+        assert_eq!(p.windows[0].array, "out");
+        assert_eq!(p.windows[0].start, var("k"));
+        assert_eq!(p.windows[0].extra, 0);
+        let mut accesses = Vec::new();
+        for s in &p.body {
+            each_access(s, &mut |a, i, _| accesses.push((a.to_string(), render_marker(i))));
+        }
+        assert_eq!(accesses.iter().filter(|(a, m)| a == "out" && m.as_deref() == Some("_w0[_wk]")).count(), 4);
+        assert_eq!(accesses.iter().filter(|(a, m)| a == "in" && m.is_none()).count(), 4);
+
+        assert_eq!(increments(&p.body), 4);
+        // Erase only the mapped target and restored step: the full branch/state
+        // structure, conditions, inputs and floating expressions must match.
+
+        assert_eq!(format!("{:?}", restore(&p.body)), format!("{body:?}"));
+    }
+
+    #[test]
+    fn collective_store_refuses_every_unproved_store_path_or_index_escape() {
+        let mut mutations = Vec::new();
+        let mut x = four_leaves(); x.push(store(var("s"))); mutations.push(x);
+        let mut x = four_leaves(); x.push(step("k", 1)); mutations.push(x);
+        let mut x = four_leaves(); x.push(Statement::Expr(var("k"))); mutations.push(x);
+        let mut x = four_leaves(); x.push(Statement::Expr(var("out"))); mutations.push(x);
+        let mut x = four_leaves(); x.push(Statement::Expr(Expr::AddressOf(Box::new(var("s"))))); mutations.push(x);
+        let mut x = four_leaves(); x.push(Statement::Expr(Expr::FuncCall("effectful".into(), vec![]))); mutations.push(x);
+        for s in [Statement::Break, Statement::Continue, Statement::Return { value: Some(int(0)) },
+            Statement::While { condition: int(1), body: vec![] },
+            Statement::VarDecl { var_type: VarType::Integer, name: "k".into(), init: Some(int(0)) }] {
+            let mut x = four_leaves(); x.push(s); mutations.push(x);
+        }
+        for value in [var("k"), at("out", int(0)), Expr::FuncCall("identity".into(), vec![var("k")]),
+            Expr::PostIncrement(Box::new(var("s"))), Expr::PointerDeref("s".into())] {
+            let leaf = || vec![store(value.clone())];
+            mutations.push(vec![step("i", 1), branch(vec![branch(leaf(), leaf())], vec![branch(leaf(), leaf())])]);
+        }
+        // Three sites, a missing else path, two stores on one branch, another
+        // output, another index, and a condition that consumes the output index.
+        mutations.push(vec![step("i", 1), branch(vec![branch(vec![store(int(1))], vec![store(int(2))])], vec![store(int(3))])]);
+        mutations.push(vec![step("i", 1), branch(vec![branch(vec![store(int(1))], vec![store(int(2))])], vec![branch(vec![store(int(3)), store(int(4))], vec![])])]);
+        mutations.push(vec![step("i", 1), branch(vec![branch(vec![store(int(1))], vec![])], vec![branch(vec![store(int(3))], vec![store(int(4))])])]);
+        for target in [at("out2", Expr::PostIncrement(Box::new(var("k")))), at("out", Expr::PostIncrement(Box::new(var("j")))), at("out", var("k"))] {
+            let bad = Statement::Assign { target, value: int(1), compound: false };
+            mutations.push(vec![step("i", 1), branch(vec![branch(vec![bad], vec![store(int(2))])], vec![branch(vec![store(int(3))], vec![store(int(4))])])]);
+        }
+        let mut x = four_leaves(); x.push(Statement::Assign { target: var("e"), value: int(1), compound: false }); mutations.push(x);
+        let mut x = four_leaves(); x.remove(0); mutations.push(x);
+        let mut x = four_leaves(); x.push(step("i", 1)); mutations.push(x);
+        let mut x = four_leaves(); x.push(branch(vec![step("k", 1)], vec![])); mutations.push(x);
+        for body in mutations { assert!(run(&body).is_none(), "{body:?}"); }
+    }
+
+    #[test]
+    fn collective_store_accepts_only_expression_proven_helper_calls() {
+        let mut body = four_leaves();
+        body.insert(1, Statement::Expr(Expr::FuncCall("identity".into(), vec![var("s")])));
+        assert!(run(&body).is_some());
+        for name in ["_wk", "_wn", "_w0"] {
+            let mut body = four_leaves();
+            body.push(Statement::Expr(Expr::FuncCall("identity".into(), vec![var(name)])));
+            assert!(run(&body).is_none());
+        }
+    }
+
+
+    #[test]
+    fn collective_store_rejects_hidden_captures_casts_and_compound_stores() {
+        let mut cases = Vec::new();
+        let mut body = four_leaves();
+        if let Statement::If { condition, .. } = &mut body[1] {
+            *condition = bin(var("k"), BinOp::Less, int(1));
+        }
+        cases.push(body);
+        let mut body = four_leaves();
+        body.push(Statement::Expr(Expr::Cast(VarType::Real, Box::new(var("k")))));
+        cases.push(body);
+        let mut body = four_leaves();
+        body.push(Statement::Assign { target: at("out", Expr::PostIncrement(Box::new(var("k")))), value: var("s"), compound: true });
+        cases.push(body);
+        for n in ["i", "e"] {
+            let mut body = four_leaves();
+            body.push(branch(vec![step(n, 1)], vec![]));
+            cases.push(body);
+        }
+        for body in cases { assert!(run(&body).is_none(), "{body:?}"); }
+        let names = Names {
+            index: &|n| ["i", "k", "e"].contains(&n), usize_expr: &|e| matches!(e, Expr::Var(_) | Expr::IntLiteral(_)),
+            castable: &|_| false, sliceable: &|_| true, same_len: &|_| false, ring_storage: &|_| None,
+        };
+        for hidden in [var("k"), at("out", int(0)), at("_w0", int(0)), var("_wk"), var("_wn")] {
+            let mut body = four_leaves();
+            body.push(Statement::Expr(Expr::FuncCall("hidden".into(), vec![var("s")])));
+            assert!(collective_output_plan(&bin(var("i"), BinOp::LessEq, var("e")), &body, &names, &|n| n == "out", &|_, _| Some(hidden.clone())).is_none());
+        }
+    }
+
+    #[test]
+    fn collective_store_refuses_wrong_counter_and_bound_or_type_forms() {
+        let index = |n: &str| ["i", "k", "e"].contains(&n);
+        let names = Names { index: &index, usize_expr: &|e| matches!(e, Expr::Var(_) | Expr::IntLiteral(_)),
+            castable: &|_| false, sliceable: &|_| true, same_len: &|_| false, ring_storage: &|_| None };
+        let cond = bin(var("i"), BinOp::LessEq, var("e"));
+        let body = four_leaves();
+        let no_inline = |_: &str, _: &[Expr]| None;
+        for wrong in [
+            bin(var("i"), BinOp::Greater, int(0)),
+            bin(Expr::PostDecrement(Box::new(var("i"))), BinOp::Greater, int(0)),
+            bin(Expr::PreIncrement(Box::new(var("i"))), BinOp::LessEq, var("e")),
+            bin(var("k"), BinOp::LessEq, var("e")),
+        ] {
+            assert!(collective_output_plan(&wrong, &body, &names, &|n| n == "out", &no_inline).is_none());
+        }
+        let not_an_index = |n: &str| ["i", "e"].contains(&n);
+        let wrong_type = Names { index: &not_an_index, ..names };
+        assert!(collective_output_plan(&cond, &body, &wrong_type, &|n| n == "out", &no_inline).is_none());
+        let not_sliceable = Names { sliceable: &|_| false, ..names };
+        assert!(collective_output_plan(&cond, &body, &not_sliceable, &|n| n == "out", &no_inline).is_none());
+        assert!(collective_output_plan(&cond, &body, &names, &|_| false, &no_inline).is_none());
+        let mut nonunit = four_leaves();
+        nonunit[0] = Statement::Assign { target: var("i"), value: bin(var("i"), BinOp::Add, int(2)), compound: true };
+        assert!(collective_output_plan(&cond, &nonunit, &names, &|n| n == "out", &no_inline).is_none());
+        let mut changed_bound = four_leaves();
+        changed_bound.push(Statement::Assign { target: var("e"), value: var("s"), compound: false });
+        assert!(collective_output_plan(&cond, &changed_bound, &names, &|n| n == "out", &no_inline).is_none());
+    }
+
+    #[test]
+    fn collective_store_preserves_real_cast_rhs_without_folding_it() {
+        fn values(body: &[Statement], out: &mut Vec<Expr>) {
+            for s in body {
+                match s {
+                    Statement::Assign { target: Expr::ArrayAccess(a, _), value, .. } if a == "out" => out.push(value.clone()),
+                    Statement::If { then_body, else_body, .. } => { values(then_body, out); values(else_body, out); }
+                    _ => {}
+                }
+            }
+        }
+        let value = Expr::Cast(VarType::Real, Box::new(Expr::Neg(Box::new(bin(var("s"), BinOp::Add, Expr::Literal(-0.))))));
+        let leaf = || vec![store(value.clone())];
+        let body = vec![step("i", 1), branch(vec![branch(leaf(), leaf())], vec![branch(leaf(), leaf())])];
+        let p = run(&body).unwrap();
+
+        let mut got = Vec::new(); values(&p.body, &mut got);
+        assert_eq!(got, vec![value; 4]);
+    }
+
+
+    #[test]
+    fn collective_store_adds_only_proved_complete_input_prefix_windows() {
+        fn run_prefix(body: &[Statement], same_len: bool) -> Option<Plan> {
+            let index = |n: &str| ["i", "k", "e", "j"].contains(&n);
+            let names = Names {
+                index: &index, usize_expr: &|e| matches!(e, Expr::Var(_) | Expr::IntLiteral(_)),
+                castable: &|_| false, sliceable: &|_| true,
+                same_len: &|a| same_len && (a == "in" || a == "in2"), ring_storage: &|_| None,
+            };
+            collective_output_plan(&bin(var("i"), BinOp::LessEq, var("e")), body, &names, &|n| n == "out", &|n, args| {
+                (n == "identity" && args.len() == 1).then(|| args[0].clone())
+            })
+        }
+        fn fixture() -> Vec<Statement> {
+            let leaf = || vec![store(Expr::Neg(Box::new(var("s"))))];
+            vec![
+                Statement::Assign { target: var("s"), value: at("in", var("i")), compound: false },
+                Statement::Assign { target: var("t"), value: at("in2", var("i")), compound: false },
+                step("i", 1), branch(vec![branch(leaf(), leaf())], vec![branch(leaf(), leaf())]),
+            ]
+        }
+        let body = fixture();
+        let p = run_prefix(&body, true).unwrap();
+        assert_eq!(p.windows.iter().map(|w| (&*w.array, w.mutable)).collect::<Vec<_>>(), vec![("out", true), ("in", false), ("in2", false)]);
+        assert_eq!(p.windows[1].start, var("i"));
+        assert_eq!(p.windows[2].start, var("i"));
+        assert!(p.windows.iter().all(|w| w.extra == 0) && p.checked);
+        let mut reads = Vec::new();
+        for s in &p.body {
+            each_access(s, &mut |a, i, _| reads.push((a.to_string(), render_marker(i))));
+        }
+        assert_eq!(reads[0], ("in".into(), Some("_w1[_wk]".into())));
+        assert_eq!(reads[1], ("in2".into(), Some("_w2[_wk]".into())));
+        assert_eq!(run_prefix(&body, false).unwrap().windows.len(), 1);
+        let mut invalid = Vec::new();
+        // A post-step read, nonbare index, another index, an arm-only read,
+        // mixed use, and a bare reference cannot become the same full prefix.
+        let mut b = fixture(); b.swap(0, 2); invalid.push(b);
+        for at_index in [bin(var("i"), BinOp::Add, int(0)), var("j")] {
+            let mut b = fixture(); b[0] = Statement::Assign { target: var("s"), value: at("in", at_index), compound: false }; invalid.push(b);
+        }
+        let mut b = fixture(); b[0] = branch(vec![b[0].clone()], vec![]); invalid.push(b);
+        let mut b = fixture(); b.push(Statement::Assign { target: var("u"), value: at("in", var("i")), compound: false }); invalid.push(b);
+        let mut b = fixture(); b.push(Statement::Expr(Expr::FuncCall("identity".into(), vec![var("in")]))); invalid.push(b);
+        for b in invalid {
+            let p = run_prefix(&b, true).unwrap();
+            assert!(p.windows.iter().all(|w| w.array != "in"));
+        }
+        let mut write = fixture();
+        write.push(Statement::Assign { target: at("in", int(0)), value: var("s"), compound: false });
+        assert!(run_prefix(&write, true).is_none());
+    }
+
+    #[test]
+    fn collective_output_inventory_is_only_the_four_leaf_sar_family() {
+        fn walk(body: &[Statement], names: &Names, output: &dyn Fn(&str) -> bool, inline: &dyn Fn(&str, &[Expr]) -> Option<Expr>) -> usize {
+            body.iter().map(|s| match s {
+                Statement::While { condition, body } => usize::from(collective_output_plan(condition, body, names, output, inline).is_some()) + walk(body, names, output, inline),
+                Statement::If { then_body, else_body, .. } => walk(then_body, names, output, inline) + walk(else_body, names, output, inline),
+                Statement::For { body, .. } | Statement::ForC { body, .. } | Statement::DoWhile { body, .. } | Statement::Block { body } => walk(body, names, output, inline),
+                _ => 0,
+            }).sum()
+        }
+        use crate::{helper_registry::{try_inline_expr, HelperRegistry}, ir::{Lang, ParamType}, parser};
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ta_codegen/input");
+        let helpers = HelperRegistry::from_dir(&root);
+        let mut admitted = Vec::new();
+        let mut scanned = 0;
+        for entry in std::fs::read_dir(&root).unwrap() {
+            let dir = entry.unwrap().path();
+            let Some(name) = dir.file_name().and_then(|n| n.to_str()) else { continue };
+            let yaml = dir.join(format!("{name}.yaml"));
+            let source = dir.join(format!("{name}.c"));
+            if !yaml.is_file() || !source.is_file() { continue; }
+            let mut func = parser::yaml::parse_yaml(&yaml);
+            parser::c_source::wire_parsed_source(&mut func, &parser::c_source::parse_c_source(&source));
+            let func = func.resolved_for(Lang::Rust);
+            let output = |n: &str| func.outputs.iter().any(|o| o.name == n && o.param_type == ParamType::Real);
+            // Over-approximate usize names here: production's real type map is
+            // stricter. Even this superset must admit only the intended family.
+            let names = Names { index: &|_| true, usize_expr: &|e| matches!(e, Expr::Var(_) | Expr::IntLiteral(_)),
+                castable: &|_| false, sliceable: &|_| true, same_len: &|_| false, ring_storage: &|_| None };
+
+            let count = walk(&func.body, &names, &output, &|n, args| try_inline_expr(helpers.get(n)?, args));
+            scanned += 1;
+            if count != 0 { admitted.push((name.to_string(), count)); }
+        }
+        admitted.sort();
+        eprintln!("collective output inventory: {scanned} functions, {admitted:?}");
+        assert_eq!(admitted, vec![("sar".into(), 1), ("sarext".into(), 1)]);
+        assert_eq!(scanned, 237);
     }
 }

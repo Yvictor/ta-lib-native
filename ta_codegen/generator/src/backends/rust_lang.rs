@@ -2966,7 +2966,16 @@ impl RustStmt<'_, '_> {
             same_len: &same_len,
             ring_storage: &ring_storage,
         };
-        let plan = super::rust_window::plan(condition, body, update, &names)?;
+        let plan = super::rust_window::plan(condition, body, update, &names).or_else(|| {
+            if update.is_some() || do_while {
+                return None;
+            }
+            super::rust_window::collective_output_plan(
+                condition, body, &names,
+                &|a| self.output_names.iter().any(|n| n == a) && !ctx.int_output_names.contains(a),
+                &|name, args| try_inline_expr(self.helpers.get(name)?, args),
+            )
+        })?;
         // A tested counter steps before the do-while's first test, not its
         // first pass.
         if do_while && plan.cond_step.is_some() {

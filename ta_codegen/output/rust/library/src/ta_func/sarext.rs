@@ -449,123 +449,252 @@ impl Core {
         // first iteration.
         newLow = inLow[todayIdx];
         newHigh = inHigh[todayIdx];
-        while todayIdx <= endIdx {
-            prevLow = newLow;
-            prevHigh = newHigh;
-            newLow = inLow[todayIdx];
-            newHigh = inHigh[todayIdx];
-            todayIdx += 1;
-            if isLong == 1 {
-                // Switch to short if the low penetrates the SAR value.
-                if newLow <= sar {
-                    // Switch and Overide the SAR with the ep
-                    isLong = 0;
-                    sar = ep;
-                    // Make sure the overide SAR is within
-                    // yesterday's and today's range.
-                    if sar < prevHigh {
-                        sar = prevHigh;
-                    }
-                    if sar < newHigh {
-                        sar = newHigh;
-                    }
-                    // Output the overide SAR
-                    if optInOffsetOnReverse != 0.0 {
-                        sar += sar * optInOffsetOnReverse;
-                    }
-                    outReal[outIdx] = -sar;
-                    outIdx += 1;
-                    // Adjust afShort and ep
-                    afShort = optInAccelerationInitShort;
-                    ep = newLow;
-                    // Calculate the new SAR
-                    sar = (afShort as f64).mul_add(ep - sar, sar);
-                    // Make sure the new SAR is within
-                    // yesterday's and today's range.
-                    if sar < prevHigh {
-                        sar = prevHigh;
-                    }
-                    if sar < newHigh {
-                        sar = newHigh;
-                    }
-                } else {
-                    // No switch
-                    // Output the SAR (was calculated in the previous iteration)
-                    outReal[outIdx] = sar;
-                    outIdx += 1;
-                    // Adjust afLong and ep.
-                    if newHigh > ep {
+        if todayIdx <= endIdx {
+            let _wn: usize = endIdx - todayIdx + 1;
+            if let (Some(_w0), Some(_w1), Some(_w2)) = (outReal.get_mut(outIdx..).and_then(|w| w.get_mut(.._wn)), inHigh.get(todayIdx..).and_then(|w| w.get(.._wn)), inLow.get(todayIdx..).and_then(|w| w.get(.._wn))) {
+                let _w0 = &mut _w0[.._wn];
+                let _w1 = &_w1[.._wn];
+                let _w2 = &_w2[.._wn];
+                for _wk in 0.._wn {
+                    prevLow = newLow;
+                    prevHigh = newHigh;
+                    newLow = _w2[_wk];
+                    newHigh = _w1[_wk];
+                    todayIdx += 1;
+                    if isLong == 1 {
+                        // Switch to short if the low penetrates the SAR value.
+                        if newLow <= sar {
+                            // Switch and Overide the SAR with the ep
+                            isLong = 0;
+                            sar = ep;
+                            // Make sure the overide SAR is within
+                            // yesterday's and today's range.
+                            if sar < prevHigh {
+                                sar = prevHigh;
+                            }
+                            if sar < newHigh {
+                                sar = newHigh;
+                            }
+                            // Output the overide SAR
+                            if optInOffsetOnReverse != 0.0 {
+                                sar += sar * optInOffsetOnReverse;
+                            }
+                            _w0[_wk] = -sar;
+                            outIdx += 1;
+                            // Adjust afShort and ep
+                            afShort = optInAccelerationInitShort;
+                            ep = newLow;
+                            // Calculate the new SAR
+                            sar = (afShort as f64).mul_add(ep - sar, sar);
+                            // Make sure the new SAR is within
+                            // yesterday's and today's range.
+                            if sar < prevHigh {
+                                sar = prevHigh;
+                            }
+                            if sar < newHigh {
+                                sar = newHigh;
+                            }
+                        } else {
+                            // No switch
+                            // Output the SAR (was calculated in the previous iteration)
+                            _w0[_wk] = sar;
+                            outIdx += 1;
+                            // Adjust afLong and ep.
+                            if newHigh > ep {
+                                ep = newHigh;
+                                afLong += optInAccelerationLong;
+                                if afLong > optInAccelerationMaxLong {
+                                    afLong = optInAccelerationMaxLong;
+                                }
+                            }
+                            // Calculate the new SAR
+                            sar = (afLong as f64).mul_add(ep - sar, sar);
+                            // Make sure the new SAR is within
+                            // yesterday's and today's range.
+                            if sar > prevLow {
+                                sar = prevLow;
+                            }
+                            if sar > newLow {
+                                sar = newLow;
+                            }
+                        }
+                    // Switch to long if the high penetrates the SAR value.
+                    } else if newHigh >= sar {
+                        // Switch and Overide the SAR with the ep
+                        isLong = 1;
+                        sar = ep;
+                        // Make sure the overide SAR is within
+                        // yesterday's and today's range.
+                        if sar > prevLow {
+                            sar = prevLow;
+                        }
+                        if sar > newLow {
+                            sar = newLow;
+                        }
+                        // Output the overide SAR
+                        if optInOffsetOnReverse != 0.0 {
+                            sar -= sar * optInOffsetOnReverse;
+                        }
+                        _w0[_wk] = sar;
+                        outIdx += 1;
+                        // Adjust afLong and ep
+                        afLong = optInAccelerationInitLong;
                         ep = newHigh;
-                        afLong += optInAccelerationLong;
-                        if afLong > optInAccelerationMaxLong {
-                            afLong = optInAccelerationMaxLong;
+                        // Calculate the new SAR
+                        sar = (afLong as f64).mul_add(ep - sar, sar);
+                        // Make sure the new SAR is within
+                        // yesterday's and today's range.
+                        if sar > prevLow {
+                            sar = prevLow;
+                        }
+                        if sar > newLow {
+                            sar = newLow;
+                        }
+                    } else {
+                        // No switch
+                        // Output the SAR (was calculated in the previous iteration)
+                        _w0[_wk] = -sar;
+                        outIdx += 1;
+                        // Adjust afShort and ep.
+                        if newLow < ep {
+                            ep = newLow;
+                            afShort += optInAccelerationShort;
+                            if afShort > optInAccelerationMaxShort {
+                                afShort = optInAccelerationMaxShort;
+                            }
+                        }
+                        // Calculate the new SAR
+                        sar = (afShort as f64).mul_add(ep - sar, sar);
+                        // Make sure the new SAR is within
+                        // yesterday's and today's range.
+                        if sar < prevHigh {
+                            sar = prevHigh;
+                        }
+                        if sar < newHigh {
+                            sar = newHigh;
                         }
                     }
-                    // Calculate the new SAR
-                    sar = (afLong as f64).mul_add(ep - sar, sar);
-                    // Make sure the new SAR is within
-                    // yesterday's and today's range.
-                    if sar > prevLow {
-                        sar = prevLow;
-                    }
-                    if sar > newLow {
-                        sar = newLow;
-                    }
-                }
-            // Switch to long if the high penetrates the SAR value.
-            } else if newHigh >= sar {
-                // Switch and Overide the SAR with the ep
-                isLong = 1;
-                sar = ep;
-                // Make sure the overide SAR is within
-                // yesterday's and today's range.
-                if sar > prevLow {
-                    sar = prevLow;
-                }
-                if sar > newLow {
-                    sar = newLow;
-                }
-                // Output the overide SAR
-                if optInOffsetOnReverse != 0.0 {
-                    sar -= sar * optInOffsetOnReverse;
-                }
-                outReal[outIdx] = sar;
-                outIdx += 1;
-                // Adjust afLong and ep
-                afLong = optInAccelerationInitLong;
-                ep = newHigh;
-                // Calculate the new SAR
-                sar = (afLong as f64).mul_add(ep - sar, sar);
-                // Make sure the new SAR is within
-                // yesterday's and today's range.
-                if sar > prevLow {
-                    sar = prevLow;
-                }
-                if sar > newLow {
-                    sar = newLow;
                 }
             } else {
-                // No switch
-                // Output the SAR (was calculated in the previous iteration)
-                outReal[outIdx] = -sar;
-                outIdx += 1;
-                // Adjust afShort and ep.
-                if newLow < ep {
-                    ep = newLow;
-                    afShort += optInAccelerationShort;
-                    if afShort > optInAccelerationMaxShort {
-                        afShort = optInAccelerationMaxShort;
+                while todayIdx <= endIdx {
+                    prevLow = newLow;
+                    prevHigh = newHigh;
+                    newLow = inLow[todayIdx];
+                    newHigh = inHigh[todayIdx];
+                    todayIdx += 1;
+                    if isLong == 1 {
+                        // Switch to short if the low penetrates the SAR value.
+                        if newLow <= sar {
+                            // Switch and Overide the SAR with the ep
+                            isLong = 0;
+                            sar = ep;
+                            // Make sure the overide SAR is within
+                            // yesterday's and today's range.
+                            if sar < prevHigh {
+                                sar = prevHigh;
+                            }
+                            if sar < newHigh {
+                                sar = newHigh;
+                            }
+                            // Output the overide SAR
+                            if optInOffsetOnReverse != 0.0 {
+                                sar += sar * optInOffsetOnReverse;
+                            }
+                            outReal[outIdx] = -sar;
+                            outIdx += 1;
+                            // Adjust afShort and ep
+                            afShort = optInAccelerationInitShort;
+                            ep = newLow;
+                            // Calculate the new SAR
+                            sar = (afShort as f64).mul_add(ep - sar, sar);
+                            // Make sure the new SAR is within
+                            // yesterday's and today's range.
+                            if sar < prevHigh {
+                                sar = prevHigh;
+                            }
+                            if sar < newHigh {
+                                sar = newHigh;
+                            }
+                        } else {
+                            // No switch
+                            // Output the SAR (was calculated in the previous iteration)
+                            outReal[outIdx] = sar;
+                            outIdx += 1;
+                            // Adjust afLong and ep.
+                            if newHigh > ep {
+                                ep = newHigh;
+                                afLong += optInAccelerationLong;
+                                if afLong > optInAccelerationMaxLong {
+                                    afLong = optInAccelerationMaxLong;
+                                }
+                            }
+                            // Calculate the new SAR
+                            sar = (afLong as f64).mul_add(ep - sar, sar);
+                            // Make sure the new SAR is within
+                            // yesterday's and today's range.
+                            if sar > prevLow {
+                                sar = prevLow;
+                            }
+                            if sar > newLow {
+                                sar = newLow;
+                            }
+                        }
+                    // Switch to long if the high penetrates the SAR value.
+                    } else if newHigh >= sar {
+                        // Switch and Overide the SAR with the ep
+                        isLong = 1;
+                        sar = ep;
+                        // Make sure the overide SAR is within
+                        // yesterday's and today's range.
+                        if sar > prevLow {
+                            sar = prevLow;
+                        }
+                        if sar > newLow {
+                            sar = newLow;
+                        }
+                        // Output the overide SAR
+                        if optInOffsetOnReverse != 0.0 {
+                            sar -= sar * optInOffsetOnReverse;
+                        }
+                        outReal[outIdx] = sar;
+                        outIdx += 1;
+                        // Adjust afLong and ep
+                        afLong = optInAccelerationInitLong;
+                        ep = newHigh;
+                        // Calculate the new SAR
+                        sar = (afLong as f64).mul_add(ep - sar, sar);
+                        // Make sure the new SAR is within
+                        // yesterday's and today's range.
+                        if sar > prevLow {
+                            sar = prevLow;
+                        }
+                        if sar > newLow {
+                            sar = newLow;
+                        }
+                    } else {
+                        // No switch
+                        // Output the SAR (was calculated in the previous iteration)
+                        outReal[outIdx] = -sar;
+                        outIdx += 1;
+                        // Adjust afShort and ep.
+                        if newLow < ep {
+                            ep = newLow;
+                            afShort += optInAccelerationShort;
+                            if afShort > optInAccelerationMaxShort {
+                                afShort = optInAccelerationMaxShort;
+                            }
+                        }
+                        // Calculate the new SAR
+                        sar = (afShort as f64).mul_add(ep - sar, sar);
+                        // Make sure the new SAR is within
+                        // yesterday's and today's range.
+                        if sar < prevHigh {
+                            sar = prevHigh;
+                        }
+                        if sar < newHigh {
+                            sar = newHigh;
+                        }
                     }
-                }
-                // Calculate the new SAR
-                sar = (afShort as f64).mul_add(ep - sar, sar);
-                // Make sure the new SAR is within
-                // yesterday's and today's range.
-                if sar < prevHigh {
-                    sar = prevHigh;
-                }
-                if sar < newHigh {
-                    sar = newHigh;
                 }
             }
         }
