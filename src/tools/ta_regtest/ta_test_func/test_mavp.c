@@ -146,6 +146,7 @@ static ErrorNumber mvLoadTypes( void );
 static ErrorNumber mvValidatedBounds( void );
 static int mvBoundRejected, mvBoundDefaulted;
 static ErrorNumber mvSparseSmaEdges( void );
+static ErrorNumber mvGenericScratchAliases( void );
 static ErrorNumber mvWidestExpressibleBand( void );
 static ErrorNumber mvStreamBank( void );
 static ErrorNumber mvOracleCheck( const char *label,
@@ -376,6 +377,9 @@ ErrorNumber test_func_mavp( TA_History *history )
    TA_SetUnstablePeriod( TA_FUNC_UNST_ALL, 0 );
 
    errNb = mvSparseSmaEdges();
+   if( errNb != TA_TEST_PASS ) return errNb;
+
+   errNb = mvGenericScratchAliases();
    if( errNb != TA_TEST_PASS ) return errNb;
 
    /* Leave globals as found. */
@@ -1311,6 +1315,87 @@ static ErrorNumber mvSparseSmaEdges( void )
    }
    if( compared < 2900 || priceAlias < 2900 || periodAlias < 2900 ||
        nonfinite < 1400 || identity < 500 )
+      return TA_MAVP_VACUOUS;
+   return TA_TEST_PASS;
+}
+
+static ErrorNumber mvGenericScratchAliases( void )
+{
+   TA_Real price[MV_BUF_SIZE], periods[MV_BUF_SIZE], out[MV_BUF_SIZE], alias[MV_BUF_SIZE];
+   TA_Integer beg, count, aliasBeg, aliasCount;
+   TA_RetCode rc;
+   int type, pattern, range, start, end, i;
+   long priceCalls = 0, periodCalls = 0, errorCalls = 0;
+
+   for( type = 0; type < mvNbTypes; type++ )
+   {
+      for( pattern = 0; pattern < 6; pattern++ )
+      {
+         for( i = 0; i < MV_BUF_SIZE; i++ )
+         {
+            price[i] = 100.0 + (double)((i*17)%97)/100.0;
+            if( pattern == 1 ) price[i] = (i%2) ? -0.0 : 0.0;
+            if( pattern == 2 ) price[i] = 2e307;
+            switch( i%8 )
+            {
+               case 0: periods[i] = 1.0; break;
+               case 1: periods[i] = 3.75; break;
+               case 2: periods[i] = 5.0; break;
+               case 3: periods[i] = 9.0; break;
+               case 4: periods[i] = 14.0; break;
+               case 5: periods[i] = NAN; break;
+               case 6: periods[i] = HUGE_VAL; break;
+               default: periods[i] = -HUGE_VAL; break;
+            }
+         }
+         if( pattern == 3 ) price[MV_DATA_SIZE/2] = NAN;
+         if( pattern == 4 ) price[MV_DATA_SIZE/2] = HUGE_VAL;
+         if( pattern == 5 ) price[MV_DATA_SIZE/2] = -HUGE_VAL;
+         for( range = 0; range < 4; range++ )
+         {
+            start = range == 0 ? 0 : (range == 1 ? 42 : (range == 2 ? 200 : 0));
+            end = range == 3 ? 0 : MV_DATA_SIZE-1;
+            for( i = 0; i < MV_BUF_SIZE; i++ ) out[i] = TA_REAL_MIN;
+            rc = TA_MAVP( start, end, price, periods, 1, 30,
+                          mvTypes[type], &beg, &count, out );
+            if( rc != TA_SUCCESS ) return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+            for( i = count; i < MV_BUF_SIZE; i++ )
+               if( out[i] != TA_REAL_MIN ) return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+
+            memcpy( alias, price, sizeof(price) );
+            rc = TA_MAVP( start, end, alias, periods, 1, 30,
+                          mvTypes[type], &aliasBeg, &aliasCount, alias );
+            if( rc != TA_SUCCESS || aliasBeg != beg || aliasCount != count ||
+                memcmp(alias,out,(size_t)count*sizeof(*out)) != 0 ||
+                memcmp(alias+count,price+count,(MV_BUF_SIZE-(size_t)count)*sizeof(*alias)) != 0 )
+            {
+               printf( "\nFail: MAVP scratch price alias type=%d pattern=%d range=%d\n", type,pattern,range );
+               return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+            }
+            priceCalls++;
+
+            memcpy( alias, periods, sizeof(periods) );
+            rc = TA_MAVP( start, end, price, alias, 1, 30,
+                          mvTypes[type], &aliasBeg, &aliasCount, alias );
+            if( rc != TA_SUCCESS || aliasBeg != beg || aliasCount != count ||
+                memcmp(alias,out,(size_t)count*sizeof(*out)) != 0 ||
+                memcmp(alias+count,periods+count,(MV_BUF_SIZE-(size_t)count)*sizeof(*alias)) != 0 )
+            {
+               printf( "\nFail: MAVP scratch period alias type=%d pattern=%d range=%d\n", type,pattern,range );
+               return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+            }
+            periodCalls++;
+         }
+         for( i = 0; i < MV_BUF_SIZE; i++ ) out[i] = TA_REAL_MIN;
+         rc = TA_MAVP( 0, MV_DATA_SIZE-1, price, periods, 30, 2,
+                       mvTypes[type], &beg, &count, out );
+         if( rc != TA_BAD_PARAM ) return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+         for( i = 0; i < MV_BUF_SIZE; i++ )
+            if( out[i] != TA_REAL_MIN ) return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+         errorCalls++;
+      }
+   }
+   if( priceCalls != mvNbTypes*24 || periodCalls != mvNbTypes*24 || errorCalls != mvNbTypes*6 )
       return TA_MAVP_VACUOUS;
    return TA_TEST_PASS;
 }
