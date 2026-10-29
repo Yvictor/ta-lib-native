@@ -147038,6 +147038,8 @@ class Core {
           double tempPeriod = 0;
           double minPeriodReal = 0;
           double maxPeriodReal = 0;
+          double periodTotal = 0;
+          double tempReal = 0;
           int firstOccurrence = 0;
           int lastOccurrence = 0;
           int bucketStart = 0;
@@ -147203,6 +147205,47 @@ class Core {
              localBegIdx.value = _xr0.begIdx();
              localNbElement.value = _xr0.count();
              retCode = RetCode.SUCCESS;
+          } else if( optInMAType == MAType.SMA ) {
+             bucketOfs = new int[(int)((maxUsed - minUsed + 1) * 1)];
+             for( curPeriod = minUsed; curPeriod <= maxUsed; curPeriod += 1 ) {
+                bucketOfs[curPeriod - minUsed] = -1;
+             }
+             for( i = 0; i < outputSize; i += 1 ) {
+                tempInt = localPeriodArray[i];
+                bucketOfs[tempInt - minUsed] = i;
+             }
+             for( curPeriod = minUsed; curPeriod <= maxUsed; curPeriod += 1 ) {
+                tempInt = bucketOfs[curPeriod - minUsed];
+                if( tempInt >= 0 ) {
+                   lastOccurrence = tempInt;
+                   if( curPeriod == 1 ) {
+                      for( i = 0; i <= lastOccurrence; i += 1 ) {
+                         tempInt = localPeriodArray[i];
+                         if( tempInt == curPeriod ) {
+                            localFinalArray[i] = inReal[startIdx + i];
+                         }
+                      }
+                   }
+                   if( curPeriod > 1 ) {
+                      /* Keep SMA's start anchor and add/subtract order. A quotient
+                       * discarded by MAVP does not feed the next SMA state.
+                       */
+                      periodTotal = 0.0;
+                      for( i = startIdx - (curPeriod - 1); i < startIdx; i += 1 ) {
+                         periodTotal += (double)inReal[i];
+                      }
+                      for( i = 0; i <= lastOccurrence; i += 1 ) {
+                         periodTotal += (double)inReal[startIdx + i];
+                         tempReal = periodTotal;
+                         periodTotal -= (double)inReal[startIdx - (curPeriod - 1) + i];
+                         tempInt = localPeriodArray[i];
+                         if( tempInt == curPeriod ) {
+                            localFinalArray[i] = tempReal / (double)curPeriod;
+                         }
+                      }
+                   }
+                }
+             }
           } else {
              localOutputArray = new double[(int)(outputSize * 1)];
              sortedIdx = new int[(int)(outputSize * 1)];
@@ -147295,6 +147338,8 @@ class Core {
           double tempPeriod = 0;
           double minPeriodReal = 0;
           double maxPeriodReal = 0;
+          double periodTotal = 0;
+          double tempReal = 0;
           int firstOccurrence = 0;
           int lastOccurrence = 0;
           int bucketStart = 0;
@@ -147395,6 +147440,44 @@ class Core {
              localBegIdx.value = _xr0.begIdx();
              localNbElement.value = _xr0.count();
              retCode = RetCode.SUCCESS;
+          } else if( optInMAType == MAType.SMA ) {
+             bucketOfs = new int[(int)((maxUsed - minUsed + 1) * 1)];
+             for( curPeriod = minUsed; curPeriod <= maxUsed; curPeriod += 1 ) {
+                bucketOfs[curPeriod - minUsed] = -1;
+             }
+             for( i = 0; i < outputSize; i += 1 ) {
+                tempInt = localPeriodArray[i];
+                bucketOfs[tempInt - minUsed] = i;
+             }
+             for( curPeriod = minUsed; curPeriod <= maxUsed; curPeriod += 1 ) {
+                tempInt = bucketOfs[curPeriod - minUsed];
+                if( tempInt >= 0 ) {
+                   lastOccurrence = tempInt;
+                   if( curPeriod == 1 ) {
+                      for( i = 0; i <= lastOccurrence; i += 1 ) {
+                         tempInt = localPeriodArray[i];
+                         if( tempInt == curPeriod ) {
+                            localFinalArray[i] = (double)inReal[startIdx + i];
+                         }
+                      }
+                   }
+                   if( curPeriod > 1 ) {
+                      periodTotal = 0.0;
+                      for( i = startIdx - (curPeriod - 1); i < startIdx; i += 1 ) {
+                         periodTotal += (double)inReal[i];
+                      }
+                      for( i = 0; i <= lastOccurrence; i += 1 ) {
+                         periodTotal += (double)inReal[startIdx + i];
+                         tempReal = periodTotal;
+                         periodTotal -= (double)inReal[startIdx - (curPeriod - 1) + i];
+                         tempInt = localPeriodArray[i];
+                         if( tempInt == curPeriod ) {
+                            localFinalArray[i] = tempReal / (double)curPeriod;
+                         }
+                      }
+                   }
+                }
+             }
           } else {
              localOutputArray = new double[(int)(outputSize * 1)];
              sortedIdx = new int[(int)(outputSize * 1)];
@@ -230421,7 +230504,7 @@ class Core {
 
 public class TaCodegenServe {
     static Core core = new Core();
-    static final String SPLICED_GENCODE_DIGEST = "2ee7a4d148242d1f";
+    static final String SPLICED_GENCODE_DIGEST = "807b1d899c0d0723";
     static final int MAX_ARRAY_SIZE = 200000;
     static double[] refOpen = new double[MAX_ARRAY_SIZE];
     static double[] refHigh = new double[MAX_ARRAY_SIZE];

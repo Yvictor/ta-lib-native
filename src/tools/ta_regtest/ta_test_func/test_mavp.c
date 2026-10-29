@@ -142,6 +142,7 @@ static float   mvPeriodsS[MV_BUF_SIZE];
 
 /**** Local functions declarations.    ****/
 static ErrorNumber mvLoadTypes( void );
+static ErrorNumber mvSparseSmaEdges( void );
 static ErrorNumber mvWidestExpressibleBand( void );
 static ErrorNumber mvStreamBank( void );
 static ErrorNumber mvOracleCheck( const char *label,
@@ -365,6 +366,9 @@ ErrorNumber test_func_mavp( TA_History *history )
    errNb = mvStreamBank();
    if( errNb != TA_TEST_PASS ) return errNb;
    TA_SetUnstablePeriod( TA_FUNC_UNST_ALL, 0 );
+
+   errNb = mvSparseSmaEdges();
+   if( errNb != TA_TEST_PASS ) return errNb;
 
    /* Leave globals as found. */
    TA_SetUnstablePeriod( TA_FUNC_UNST_ALL, 0 );
@@ -1138,5 +1142,110 @@ static ErrorNumber mvSinglePrecisionCheck( const char *label,
          }
       }
    }
+   return TA_TEST_PASS;
+}
+
+
+static int mvSameSparseValue( TA_Real a, TA_Real b )
+{
+   return (isnan(a) && isnan(b)) || memcmp( &a, &b, sizeof(a) ) == 0;
+}
+
+static ErrorNumber mvSparseSmaEdges( void )
+{
+   TA_Real price[MV_DATA_SIZE], periods[MV_DATA_SIZE];
+   TA_Real out[MV_BUF_SIZE], oracle[MV_BUF_SIZE], alias[MV_BUF_SIZE];
+   TA_Integer beg, count, maBeg, maCount;
+   TA_RetCode rc;
+   int kind, startCase, start, i, p;
+   long compared = 0, priceAlias = 0, periodAlias = 0;
+   long nonfinite = 0, identity = 0;
+
+   for( kind = 0; kind < 6; kind++ )
+   {
+      for( i = 0; i < MV_DATA_SIZE; i++ )
+      {
+         price[i] = 100.0 + (double)((i*17)%97)/100.0;
+         if( kind == 1 ) price[i] = (i%2) ? -0.0 : 0.0;
+         if( kind == 2 ) price[i] = 2e307;
+         switch( i%8 )
+         {
+            case 0: periods[i] = 1.0; break;
+            case 1: periods[i] = 3.75; break;
+            case 2: periods[i] = 5.0; break;
+            case 3: periods[i] = 9.0; break;
+            case 4: periods[i] = 14.0; break;
+            case 5: periods[i] = NAN; break;
+            case 6: periods[i] = HUGE_VAL; break;
+            default: periods[i] = -HUGE_VAL; break;
+         }
+      }
+      if( kind == 3 ) price[MV_DATA_SIZE/2] = NAN;
+      if( kind == 4 ) price[MV_DATA_SIZE/2] = HUGE_VAL;
+      if( kind == 5 ) price[MV_DATA_SIZE/2] = -HUGE_VAL;
+      for( startCase = 0; startCase < 3; startCase++ )
+      {
+         start = startCase == 0 ? 0 : (startCase == 1 ? 42 : 200);
+         for( i = 0; i < MV_BUF_SIZE; i++ ) out[i] = TA_REAL_MIN;
+         rc = TA_MAVP( start, MV_DATA_SIZE-1, price, periods, 1, 30,
+                        TA_MAType_SMA, &beg, &count, out );
+         if( rc != TA_SUCCESS || beg != (start > 29 ? start : 29) ||
+             count != MV_DATA_SIZE-beg )
+            return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+         for( i = count; i < MV_BUF_SIZE; i++ )
+            if( out[i] != TA_REAL_MIN ) return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+         for( p = 1; p <= 30; p++ )
+         {
+            rc = TA_MA( beg, MV_DATA_SIZE-1, price, p, TA_MAType_SMA,
+                         &maBeg, &maCount, oracle );
+            if( rc != TA_SUCCESS || maBeg != beg || maCount != count )
+               return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+            for( i = 0; i < count; i++ )
+            {
+               if( mvClamp(periods[beg+i],1,30) != p ) continue;
+               if( !mvSameSparseValue(out[i],oracle[i]) )
+               {
+                  printf( "\nFail: MAVP sparse SMA oracle kind=%d start=%d row=%d period=%d\n",
+                          kind, start, i, p );
+                  return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+               }
+               compared++;
+               if( kind >= 3 ) nonfinite++;
+               if( p == 1 ) identity++;
+            }
+         }
+         memcpy( alias, price, sizeof(price) );
+         rc = TA_MAVP( start, MV_DATA_SIZE-1, alias, periods, 1, 30,
+                        TA_MAType_SMA, &maBeg, &maCount, alias );
+         if( rc != TA_SUCCESS || maBeg != beg || maCount != count )
+            return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+         for( i = 0; i < count; i++ )
+         {
+            if( !mvSameSparseValue(alias[i],out[i]) )
+            {
+               printf( "\nFail: MAVP sparse SMA price alias kind=%d start=%d row=%d\n", kind,start,i );
+               return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+            }
+            priceAlias++;
+         }
+         memcpy( alias, periods, sizeof(periods) );
+         rc = TA_MAVP( start, MV_DATA_SIZE-1, price, alias, 1, 30,
+                        TA_MAType_SMA, &maBeg, &maCount, alias );
+         if( rc != TA_SUCCESS || maBeg != beg || maCount != count )
+            return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+         for( i = 0; i < count; i++ )
+         {
+            if( !mvSameSparseValue(alias[i],out[i]) )
+            {
+               printf( "\nFail: MAVP sparse SMA period alias kind=%d start=%d row=%d\n", kind,start,i );
+               return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+            }
+            periodAlias++;
+         }
+      }
+   }
+   if( compared < 2900 || priceAlias < 2900 || periodAlias < 2900 ||
+       nonfinite < 1400 || identity < 500 )
+      return TA_MAVP_VACUOUS;
    return TA_TEST_PASS;
 }

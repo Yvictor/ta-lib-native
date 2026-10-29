@@ -118,6 +118,8 @@ TA_LIB_API TA_RetCode TA_MAVP( int    startIdx,
    double tempPeriod;
    double minPeriodReal;
    double maxPeriodReal;
+   double periodTotal;
+   double tempReal;
    int firstOccurrence;
    int lastOccurrence;
    int bucketStart;
@@ -335,6 +337,71 @@ TA_LIB_API TA_RetCode TA_MAVP( int    startIdx,
          *outNBElement= 0;
          return retCode;
       }
+   } else if( optInMAType == TA_MAType_SMA )
+   {
+      bucketOfs = malloc((maxUsed - minUsed + 1) * sizeof(int));
+      if( bucketOfs == NULL )
+      {
+         free(localPeriodArray);
+         if( finalIsAllocated )
+         {
+            free(localFinalArray);
+         }
+         *outBegIdx= 0;
+         *outNBElement= 0;
+         return TA_ALLOC_ERR;
+      }
+      for( curPeriod = minUsed; curPeriod <= maxUsed; curPeriod += 1 )
+      {
+         bucketOfs[curPeriod - minUsed] = -1;
+      }
+      for( i = 0; i < outputSize; i += 1 )
+      {
+         tempInt = localPeriodArray[i];
+         bucketOfs[tempInt - minUsed] = i;
+      }
+      for( curPeriod = minUsed; curPeriod <= maxUsed; curPeriod += 1 )
+      {
+         tempInt = bucketOfs[curPeriod - minUsed];
+         if( tempInt >= 0 )
+         {
+            lastOccurrence = tempInt;
+            if( curPeriod == 1 )
+            {
+               for( i = 0; i <= lastOccurrence; i += 1 )
+               {
+                  tempInt = localPeriodArray[i];
+                  if( tempInt == curPeriod )
+                  {
+                     localFinalArray[i] = inReal[startIdx + i];
+                  }
+               }
+            }
+            if( curPeriod > 1 )
+            {
+               /* Keep SMA's start anchor and add/subtract order. A quotient
+                * discarded by MAVP does not feed the next SMA state.
+                */
+               periodTotal = 0.0;
+               for( i = startIdx - (curPeriod - 1); i < startIdx; i += 1 )
+               {
+                  periodTotal += (double)inReal[i];
+               }
+               for( i = 0; i <= lastOccurrence; i += 1 )
+               {
+                  periodTotal += (double)inReal[startIdx + i];
+                  tempReal = periodTotal;
+                  periodTotal -= (double)inReal[startIdx - (curPeriod - 1) + i];
+                  tempInt = localPeriodArray[i];
+                  if( tempInt == curPeriod )
+                  {
+                     localFinalArray[i] = tempReal / (double)curPeriod;
+                  }
+               }
+            }
+         }
+      }
+      free(bucketOfs);
    } else 
    {
       localOutputArray = malloc(outputSize * sizeof(double));
@@ -472,6 +539,8 @@ TA_RetCode TA_S_MAVP( int    startIdx,
    double tempPeriod;
    double minPeriodReal;
    double maxPeriodReal;
+   double periodTotal;
+   double tempReal;
    int firstOccurrence;
    int lastOccurrence;
    int bucketStart;
@@ -624,6 +693,68 @@ TA_RetCode TA_S_MAVP( int    startIdx,
          *outNBElement= 0;
          return retCode;
       }
+   } else if( optInMAType == TA_MAType_SMA )
+   {
+      bucketOfs = malloc((maxUsed - minUsed + 1) * sizeof(int));
+      if( bucketOfs == NULL )
+      {
+         free(localPeriodArray);
+         if( finalIsAllocated )
+         {
+            free(localFinalArray);
+         }
+         *outBegIdx= 0;
+         *outNBElement= 0;
+         return TA_ALLOC_ERR;
+      }
+      for( curPeriod = minUsed; curPeriod <= maxUsed; curPeriod += 1 )
+      {
+         bucketOfs[curPeriod - minUsed] = -1;
+      }
+      for( i = 0; i < outputSize; i += 1 )
+      {
+         tempInt = localPeriodArray[i];
+         bucketOfs[tempInt - minUsed] = i;
+      }
+      for( curPeriod = minUsed; curPeriod <= maxUsed; curPeriod += 1 )
+      {
+         tempInt = bucketOfs[curPeriod - minUsed];
+         if( tempInt >= 0 )
+         {
+            lastOccurrence = tempInt;
+            if( curPeriod == 1 )
+            {
+               for( i = 0; i <= lastOccurrence; i += 1 )
+               {
+                  tempInt = localPeriodArray[i];
+                  if( tempInt == curPeriod )
+                  {
+                     localFinalArray[i] = (double)inReal[startIdx + i];
+                  }
+               }
+            }
+            if( curPeriod > 1 )
+            {
+               periodTotal = 0.0;
+               for( i = startIdx - (curPeriod - 1); i < startIdx; i += 1 )
+               {
+                  periodTotal += (double)inReal[i];
+               }
+               for( i = 0; i <= lastOccurrence; i += 1 )
+               {
+                  periodTotal += (double)inReal[startIdx + i];
+                  tempReal = periodTotal;
+                  periodTotal -= (double)inReal[startIdx - (curPeriod - 1) + i];
+                  tempInt = localPeriodArray[i];
+                  if( tempInt == curPeriod )
+                  {
+                     localFinalArray[i] = tempReal / (double)curPeriod;
+                  }
+               }
+            }
+         }
+      }
+      free(bucketOfs);
    } else 
    {
       localOutputArray = malloc(outputSize * sizeof(double));

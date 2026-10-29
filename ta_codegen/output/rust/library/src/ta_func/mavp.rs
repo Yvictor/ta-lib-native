@@ -188,6 +188,8 @@ impl Core {
         let mut tempPeriod: f64 = 0.0_f64;
         let mut minPeriodReal: f64 = 0.0_f64;
         let mut maxPeriodReal: f64 = 0.0_f64;
+        let mut periodTotal: f64 = 0.0_f64;
+        let mut tempReal: f64 = 0.0_f64;
         let mut firstOccurrence: usize = 0_usize;
         let mut lastOccurrence: usize = 0_usize;
         let mut bucketStart: usize = 0_usize;
@@ -223,6 +225,7 @@ impl Core {
             (*outNBElement) = 0;
             return RetCode::Success;
         }
+        let inReal = &inReal[..=endIdx];
         let inPeriods = &inPeriods[..=endIdx];
         // Calculate exact output size. A dedicated temp: tempInt is the cast-fed
         // period below, which the Rust backend types SIGNED (#160) — reusing it
@@ -327,6 +330,64 @@ impl Core {
             localBegIdx = _xr0.beg_idx;
             localNbElement = _xr0.count;
             retCode = RetCode::Success;
+        } else if optInMAType == MAType::SMA {
+            bucketOfs = vec![0_i32; ((maxUsed - minUsed + 1) * 1) as usize];
+            curPeriod = minUsed;
+            if curPeriod <= maxUsed {
+                let _wn: usize = maxUsed - curPeriod + 1;
+                let _w0 = &mut bucketOfs[curPeriod - minUsed..][.._wn];
+                for _wk in 0.._wn {
+                    _w0[_wk] = -1;
+                    curPeriod += 1;
+                }
+            }
+            i = 0;
+            if i < outputSize {
+                let _wn: usize = outputSize - i;
+                let _w0 = &localPeriodArray[i..][.._wn];
+                for _wk in 0.._wn {
+                    tempInt = _w0[_wk];
+                    bucketOfs[(tempInt - ((minUsed) as i32)) as usize] = (i) as i32;
+                    i += 1;
+                }
+            }
+            for curPeriod in (minUsed as usize)..(maxUsed as usize) + 1 {
+                tempInt = bucketOfs[curPeriod - minUsed];
+                if tempInt >= 0 {
+                    lastOccurrence = (tempInt) as usize;
+                    if curPeriod == 1 {
+                        for i in (0 as usize)..(lastOccurrence as usize) + 1 {
+                            tempInt = localPeriodArray[i];
+                            if tempInt == ((curPeriod) as i32) {
+                                outReal[i] = ((inReal[startIdx + i]) as f64);
+                            }
+                        }
+                        i = (lastOccurrence as usize) + 1;
+                    }
+                    if curPeriod > 1 {
+                        // Keep SMA's start anchor and add/subtract order. A quotient
+                        // discarded by MAVP does not feed the next SMA state.
+                        periodTotal = 0.0;
+                        // for( i = startIdx - (curPeriod - 1); i < startIdx; i += 1 )
+                        i = startIdx - (curPeriod - 1);
+                        while i < startIdx {
+                            periodTotal += inReal[i] as f64;
+                            i += 1;
+                        }
+                        for i in (0 as usize)..(lastOccurrence as usize) + 1 {
+                            periodTotal += inReal[startIdx + i] as f64;
+                            tempReal = periodTotal;
+                            periodTotal -= inReal[startIdx - (curPeriod - 1) + i] as f64;
+                            tempInt = localPeriodArray[i];
+                            if tempInt == ((curPeriod) as i32) {
+                                outReal[i] = tempReal / (curPeriod as f64);
+                            }
+                        }
+                        i = (lastOccurrence as usize) + 1;
+                    }
+                }
+            }
+            curPeriod = (maxUsed as usize) + 1;
         } else {
             localOutputArray = vec![0.0_f64; (outputSize * 1) as usize];
             sortedIdx = vec![0_i32; (outputSize * 1) as usize];

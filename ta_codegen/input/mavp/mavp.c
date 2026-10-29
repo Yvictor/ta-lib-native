@@ -42,6 +42,7 @@ TA_RetCode mavp(int startIdx, int endIdx,
 {
    int i, lookbackTotal, outputSize, firstOut, tempInt, curPeriod;
    double tempPeriod, minPeriodReal, maxPeriodReal;
+   double periodTotal, tempReal;
    int firstOccurrence, lastOccurrence, bucketStart, bucketEnd;
    int minUsed, maxUsed;
    int *localPeriodArray;
@@ -217,6 +218,60 @@ TA_RetCode mavp(int startIdx, int endIdx,
          *outNBElement = 0;
          return retCode;
       }
+   }
+   else if( optInMAType == TA_MAType_SMA )
+   {
+      bucketOfs = malloc((maxUsed-minUsed+1) * sizeof(int));
+      if( bucketOfs == NULL )
+      {
+         free(localPeriodArray);
+         if( finalIsAllocated ) { free(localFinalArray); }
+         *outBegIdx = 0;
+         *outNBElement = 0;
+         return TA_ALLOC_ERR;
+      }
+      for( curPeriod=minUsed; curPeriod <= maxUsed; curPeriod++ )
+         bucketOfs[curPeriod-minUsed] = -1;
+      for( i=0; i < outputSize; i++ )
+      {
+         tempInt = localPeriodArray[i];
+         bucketOfs[tempInt-minUsed] = i;
+      }
+      for( curPeriod=minUsed; curPeriod <= maxUsed; curPeriod++ )
+      {
+         tempInt = bucketOfs[curPeriod-minUsed];
+         if( tempInt >= 0 )
+         {
+            lastOccurrence = tempInt;
+            if( curPeriod == 1 )
+            {
+               for( i=0; i <= lastOccurrence; i++ )
+               {
+                  tempInt = localPeriodArray[i];
+                  if( tempInt == curPeriod )
+                     localFinalArray[i] = inReal[startIdx+i];
+               }
+            }
+            if( curPeriod > 1 )
+            {
+               /* Keep SMA's start anchor and add/subtract order. A quotient
+                * discarded by MAVP does not feed the next SMA state. */
+               periodTotal = 0.0;
+               for( i=startIdx-(curPeriod-1); i < startIdx; i++ )
+                  periodTotal += (double)inReal[i];
+               for( i=0; i <= lastOccurrence; i++ )
+               {
+                  periodTotal += (double)inReal[startIdx+i];
+                  tempReal = periodTotal;
+                  periodTotal -= (double)inReal[startIdx-(curPeriod-1)+i];
+                  tempInt = localPeriodArray[i];
+                  if( tempInt == curPeriod )
+                     localFinalArray[i] = tempReal / (double)curPeriod;
+               }
+            }
+         }
+      }
+      free(bucketOfs);
    }
    else
    {
