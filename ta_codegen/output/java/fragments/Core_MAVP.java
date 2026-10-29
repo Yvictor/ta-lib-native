@@ -121,6 +121,8 @@
       int bucketEnd = 0;
       int minUsed = 0;
       int maxUsed = 0;
+      int minFound = 0;
+      int maxFound = 0;
       int[] localPeriodArray;
       int[] sortedIdx;
       int[] bucketOfs;
@@ -211,11 +213,12 @@
        * backends and it makes the shared source safe by construction rather than
        * by trusting each backend's prologue to be identical.
        */
-      minUsed = optInMaxPeriod;
-      if( minUsed < 1 ) {
-         minUsed = 1;
+      tempInt = optInMaxPeriod;
+      if( tempInt < 1 ) {
+         tempInt = 1;
       }
-      maxUsed = 1;
+      minFound = tempInt;
+      maxFound = 1;
       /* Both bounds widened once, outside the loop. In the C backend, left to the
        * compiler, only the first of the two is hoisted.
        */
@@ -243,13 +246,15 @@
             tempInt = 1;
          }
          localPeriodArray[i] = tempInt;
-         if( tempInt < minUsed ) {
-            minUsed = tempInt;
+         if( tempInt < minFound ) {
+            minFound = tempInt;
          }
-         if( tempInt > maxUsed ) {
-            maxUsed = tempInt;
+         if( tempInt > maxFound ) {
+            maxFound = tempInt;
          }
       }
+      minUsed = minFound;
+      maxUsed = maxFound;
       /* Bound the bucket table before sizing it.
        *
        * Unreachable through the API: mavp.yaml's period range keeps the spread
@@ -421,6 +426,8 @@
       int bucketEnd = 0;
       int minUsed = 0;
       int maxUsed = 0;
+      int minFound = 0;
+      int maxFound = 0;
       int[] localPeriodArray;
       int[] sortedIdx;
       int[] bucketOfs;
@@ -480,11 +487,12 @@
       } else {
          localFinalArray = outReal;
       }
-      minUsed = optInMaxPeriod;
-      if( minUsed < 1 ) {
-         minUsed = 1;
+      tempInt = optInMaxPeriod;
+      if( tempInt < 1 ) {
+         tempInt = 1;
       }
-      maxUsed = 1;
+      minFound = tempInt;
+      maxFound = 1;
       minPeriodReal = optInMinPeriod;
       maxPeriodReal = optInMaxPeriod;
       for( i = 0; i < outputSize; i += 1 ) {
@@ -500,13 +508,15 @@
             tempInt = 1;
          }
          localPeriodArray[i] = tempInt;
-         if( tempInt < minUsed ) {
-            minUsed = tempInt;
+         if( tempInt < minFound ) {
+            minFound = tempInt;
          }
-         if( tempInt > maxUsed ) {
-            maxUsed = tempInt;
+         if( tempInt > maxFound ) {
+            maxFound = tempInt;
          }
       }
+      minUsed = minFound;
+      maxUsed = maxFound;
       if( maxUsed < minUsed || maxUsed - minUsed > 100000 ) {
          return RetCode.BAD_PARAM ;
       }

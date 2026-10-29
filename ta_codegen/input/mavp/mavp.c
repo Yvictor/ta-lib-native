@@ -45,6 +45,7 @@ TA_RetCode mavp(int startIdx, int endIdx,
    double periodTotal, tempReal;
    int firstOccurrence, lastOccurrence, bucketStart, bucketEnd;
    int minUsed, maxUsed;
+   int minFound, maxFound;
    int *localPeriodArray;
    int *sortedIdx;
    int *bucketOfs;
@@ -139,10 +140,11 @@ TA_RetCode mavp(int startIdx, int endIdx,
     * backends and it makes the shared source safe by construction rather than
     * by trusting each backend's prologue to be identical.
     */
-   minUsed = optInMaxPeriod;
-   if( minUsed < 1 )
-      minUsed = 1;
-   maxUsed = 1;
+   tempInt = optInMaxPeriod;
+   if( tempInt < 1 )
+      tempInt = 1;
+   minFound = tempInt;
+   maxFound = 1;
    /* Both bounds widened once, outside the loop. In the C backend, left to the
     * compiler, only the first of the two is hoisted.
     */
@@ -169,11 +171,14 @@ TA_RetCode mavp(int startIdx, int endIdx,
       if( tempInt < 1 )
          tempInt = 1;
       localPeriodArray[i] = tempInt;
-      if( tempInt < minUsed )
-         minUsed = tempInt;
-      if( tempInt > maxUsed )
-         maxUsed = tempInt;
+      if( tempInt < minFound )
+         minFound = tempInt;
+      if( tempInt > maxFound )
+         maxFound = tempInt;
    }
+
+   minUsed = minFound;
+   maxUsed = maxFound;
 
    /* Bound the bucket table before sizing it.
     *

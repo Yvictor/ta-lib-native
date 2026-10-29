@@ -196,6 +196,8 @@ impl Core {
         let mut bucketEnd: usize = 0_usize;
         let mut minUsed: usize = 0_usize;
         let mut maxUsed: usize = 0_usize;
+        let mut minFound: i32 = 0_i32;
+        let mut maxFound: i32 = 0_i32;
         let mut localPeriodArray: Vec<i32> = Vec::new();
         let mut sortedIdx: Vec<i32> = Vec::new();
         let mut bucketOfs: Vec<i32> = Vec::new();
@@ -262,11 +264,12 @@ impl Core {
         // it is kept because this file is the source of truth for four
         // backends and it makes the shared source safe by construction rather than
         // by trusting each backend's prologue to be identical.
-        minUsed = (optInMaxPeriod) as usize;
-        if minUsed < 1 {
-            minUsed = 1;
+        tempInt = optInMaxPeriod;
+        if tempInt < 1 {
+            tempInt = 1;
         }
-        maxUsed = 1;
+        minFound = tempInt;
+        maxFound = 1;
         // Both bounds widened once, outside the loop. In the C backend, left to the
         // compiler, only the first of the two is hoisted.
         minPeriodReal = ((optInMinPeriod) as f64);
@@ -294,14 +297,16 @@ impl Core {
                 tempInt = 1;
             }
             localPeriodArray[i] = (tempInt) as i32;
-            if tempInt < ((minUsed) as i32) {
-                minUsed = (tempInt) as usize;
+            if tempInt < minFound {
+                minFound = tempInt;
             }
-            if tempInt > ((maxUsed) as i32) {
-                maxUsed = (tempInt) as usize;
+            if tempInt > maxFound {
+                maxFound = tempInt;
             }
             i += 1;
         }
+        minUsed = (minFound) as usize;
+        maxUsed = (maxFound) as usize;
         // Bound the bucket table before sizing it.
         //
         // Unreachable through the API: mavp.yaml's period range keeps the spread

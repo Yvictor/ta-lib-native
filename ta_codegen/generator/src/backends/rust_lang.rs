@@ -12,6 +12,9 @@ use crate::registry::Registry;
 use super::common::{contains_alloc_err_return, expr_directly_contains_candle_call, find_sizeof_type};
 use super::ir_cleanup;
 
+#[path = "rust_numeric_copy.rs"]
+mod numeric_copy;
+
 /// Words this backend cannot render as an identifier (see [`crate::naming`]):
 /// the strict keywords of every edition through 2024, plus the set reserved for
 /// future use. Raw identifiers (`r#loop`) would sidestep most of these, but the
@@ -1195,7 +1198,7 @@ fn gen_guarded_func(
             .collect();
         let enum_vars = enum_local_types(func);
         prune_enum_locals(&mut g_index_vars, &enum_vars);
-        let g_ctx = RustRenderCtx {
+        let mut g_ctx = RustRenderCtx {
             for_range_lowering: true,
             window_loops: true,
             same_len_inputs: std::collections::HashSet::new(),
@@ -1218,6 +1221,19 @@ fn gen_guarded_func(
             circbuf_hybrid_static: collect_circbuf_static(&func.body),
             circbuf_len_of: collect_circbuf_len_of(&func.body),
         };
+
+        // A value alias may stay signed only when all old observations already
+        // narrow it to i32 or copy its unchanged usize bit pattern onward.
+        let signature_names = func.inputs.iter().map(|p| p.name.clone())
+            .chain(func.optional_inputs.iter().map(|p| p.name.clone()))
+            .chain(func.outputs.iter().map(|p| p.name.clone()))
+            .chain(func.private_extra_params.iter().map(|(name, _)| name.clone()))
+            .chain(["startIdx", "endIdx", "outBegIdx", "outNBElement"].map(str::to_string))
+            .collect();
+        for name in numeric_copy::prove(&func.body, &g_ctx, &signature_names) {
+            g_ctx.index_vars.remove(&name);
+            g_ctx.sentinel_vars.insert(name);
+        }
 
         // Use the same full rendering as the `_private` body
         let g_for_loop_vars = collect_for_loop_vars(&func.body);

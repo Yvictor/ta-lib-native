@@ -126,6 +126,8 @@ TA_LIB_API TA_RetCode TA_MAVP( int    startIdx,
    int bucketEnd;
    int minUsed;
    int maxUsed;
+   int minFound;
+   int maxFound;
    int *localPeriodArray;
    int *sortedIdx;
    int *bucketOfs;
@@ -245,12 +247,13 @@ TA_LIB_API TA_RetCode TA_MAVP( int    startIdx,
     * backends and it makes the shared source safe by construction rather than
     * by trusting each backend's prologue to be identical.
     */
-   minUsed = optInMaxPeriod;
-   if( minUsed < 1 )
+   tempInt = optInMaxPeriod;
+   if( tempInt < 1 )
    {
-      minUsed = 1;
+      tempInt = 1;
    }
-   maxUsed = 1;
+   minFound = tempInt;
+   maxFound = 1;
    /* Both bounds widened once, outside the loop. In the C backend, left to the
     * compiler, only the first of the two is hoisted.
     */
@@ -283,15 +286,17 @@ TA_LIB_API TA_RetCode TA_MAVP( int    startIdx,
          tempInt = 1;
       }
       localPeriodArray[i] = tempInt;
-      if( tempInt < minUsed )
+      if( tempInt < minFound )
       {
-         minUsed = tempInt;
+         minFound = tempInt;
       }
-      if( tempInt > maxUsed )
+      if( tempInt > maxFound )
       {
-         maxUsed = tempInt;
+         maxFound = tempInt;
       }
    }
+   minUsed = minFound;
+   maxUsed = maxFound;
    /* Bound the bucket table before sizing it.
     *
     * Unreachable through the API: mavp.yaml's period range keeps the spread
@@ -547,6 +552,8 @@ TA_RetCode TA_S_MAVP( int    startIdx,
    int bucketEnd;
    int minUsed;
    int maxUsed;
+   int minFound;
+   int maxFound;
    int *localPeriodArray;
    int *sortedIdx;
    int *bucketOfs;
@@ -635,12 +642,13 @@ TA_RetCode TA_S_MAVP( int    startIdx,
    {
       localFinalArray = outReal;
    }
-   minUsed = optInMaxPeriod;
-   if( minUsed < 1 )
+   tempInt = optInMaxPeriod;
+   if( tempInt < 1 )
    {
-      minUsed = 1;
+      tempInt = 1;
    }
-   maxUsed = 1;
+   minFound = tempInt;
+   maxFound = 1;
    minPeriodReal = optInMinPeriod;
    maxPeriodReal = optInMaxPeriod;
    for( i = 0; i < outputSize; i += 1 )
@@ -661,15 +669,17 @@ TA_RetCode TA_S_MAVP( int    startIdx,
          tempInt = 1;
       }
       localPeriodArray[i] = tempInt;
-      if( tempInt < minUsed )
+      if( tempInt < minFound )
       {
-         minUsed = tempInt;
+         minFound = tempInt;
       }
-      if( tempInt > maxUsed )
+      if( tempInt > maxFound )
       {
-         maxUsed = tempInt;
+         maxFound = tempInt;
       }
    }
+   minUsed = minFound;
+   maxUsed = maxFound;
    if( maxUsed < minUsed || maxUsed - minUsed > 100000 )
    {
       free(localPeriodArray);
