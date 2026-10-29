@@ -90,7 +90,6 @@ TA_LIB_API TA_RetCode TA_WMA( int    startIdx,
    int i;
    int trailingIdx;
    int j;
-   int rw;
    int lookbackWin;
    int barsSinceReseed;
    double periodSum;
@@ -98,6 +97,7 @@ TA_LIB_API TA_RetCode TA_WMA( int    startIdx,
    double tempReal;
    double trailingValue;
    double divider;
+   double rw;
    int lookbackTotal;
 
    if( (startIdx < 0) || (startIdx > TA_INDEX_MAX) )
@@ -116,6 +116,7 @@ TA_LIB_API TA_RetCode TA_WMA( int    startIdx,
    if( !outReal )
       return TA_BAD_PARAM;
 
+   /* Multiplication weights are exact integers no larger than 100000. */
    lookbackTotal = optInTimePeriod - 1;
    /* Move up the start index if there is not
     * enough initial data.
@@ -189,14 +190,14 @@ TA_LIB_API TA_RetCode TA_WMA( int    startIdx,
    periodSub = (double)0.0;
    periodSum = periodSub;
    inIdx = trailingIdx;
-   i = 1;
+   rw = 1.0;
    while( inIdx < startIdx )
    {
       tempReal = inReal[inIdx];
       inIdx += 1;
       periodSub += tempReal;
-      periodSum += tempReal * i;
-      i += 1;
+      periodSum += tempReal * rw;
+      rw += 1;
    }
    barsSinceReseed = 8 * optInTimePeriod;
    trailingValue = 0.0;
@@ -259,7 +260,7 @@ TA_LIB_API TA_RetCode TA_WMA( int    startIdx,
          barsSinceReseed = 8 * optInTimePeriod;
          periodSub = (double)0.0;
          periodSum = (double)0.0;
-         rw = 1;
+         rw = 1.0;
          for( j = inIdx - lookbackWin; j <= inIdx; j += 1 )
          {
             tempReal = inReal[j];
@@ -300,7 +301,6 @@ TA_RetCode TA_S_WMA( int    startIdx,
    int i;
    int trailingIdx;
    int j;
-   int rw;
    int lookbackWin;
    int barsSinceReseed;
    double periodSum;
@@ -308,6 +308,7 @@ TA_RetCode TA_S_WMA( int    startIdx,
    double tempReal;
    double trailingValue;
    double divider;
+   double rw;
    int lookbackTotal;
 
    if( (startIdx < 0) || (startIdx > TA_INDEX_MAX) )
@@ -355,14 +356,14 @@ TA_RetCode TA_S_WMA( int    startIdx,
    periodSub = (double)0.0;
    periodSum = periodSub;
    inIdx = trailingIdx;
-   i = 1;
+   rw = 1.0;
    while( inIdx < startIdx )
    {
       tempReal = (double)inReal[inIdx];
       inIdx += 1;
       periodSub += tempReal;
-      periodSum += tempReal * i;
-      i += 1;
+      periodSum += tempReal * rw;
+      rw += 1;
    }
    barsSinceReseed = 8 * optInTimePeriod;
    trailingValue = 0.0;
@@ -378,7 +379,7 @@ TA_RetCode TA_S_WMA( int    startIdx,
          barsSinceReseed = 8 * optInTimePeriod;
          periodSub = (double)0.0;
          periodSum = (double)0.0;
-         rw = 1;
+         rw = 1.0;
          for( j = inIdx - lookbackWin; j <= inIdx; j += 1 )
          {
             tempReal = (double)inReal[j];
@@ -435,8 +436,8 @@ static void TA_WMA_ReleaseImpl( struct TA_WMA_Stream *sp )
 static void TA_WMA_StepImpl( struct TA_WMA_Stream *sp, double inReal, double *outReal )
 {
    int j;
-   int rw;
    double tempReal;
+   double rw;
    int ringCapL_trailingIdx;
    double periodSum;
    double periodSub;
@@ -508,7 +509,7 @@ static void TA_WMA_StepImpl( struct TA_WMA_Stream *sp, double inReal, double *ou
       sp->barsSinceReseed = 8 * sp->optInTimePeriod;
       periodSub = (double)0.0;
       periodSum = (double)0.0;
-      rw = 1;
+      rw = 1.0;
       for( j = sp->lookbackWin; j >= 0; j -= 1 )
       {
          tempReal = sp->win_j_inReal[(sp->winPos_j + sp->winCap_j - j >= sp->winCap_j) ? sp->winPos_j + sp->winCap_j - j - sp->winCap_j : sp->winPos_j + sp->winCap_j - j];
@@ -623,7 +624,6 @@ static TA_RetCode TA_WMA_OpenImpl( struct TA_WMA_Stream **stream, const double i
       int i;
       int trailingIdx;
       int j;
-      int rw;
       int lookbackWin = 0;
       int barsSinceReseed = 0;
       double periodSum = 0.0;
@@ -631,6 +631,8 @@ static TA_RetCode TA_WMA_OpenImpl( struct TA_WMA_Stream **stream, const double i
       double tempReal;
       double trailingValue = 0.0;
       double divider = 0.0;
+      /* Multiplication weights are exact integers no larger than 100000. */
+      double rw;
       int lookbackTotal;
       lookbackTotal = optInTimePeriod - 1;
       /* Move up the start index if there is not
@@ -685,14 +687,14 @@ static TA_RetCode TA_WMA_OpenImpl( struct TA_WMA_Stream **stream, const double i
       periodSub = (double)0.0;
       periodSum = periodSub;
       inIdx = trailingIdx;
-      i = 1;
+      rw = 1.0;
       while( inIdx < startIdx )
       {
          tempReal = inReal[inIdx];
          inIdx += 1;
          periodSub += tempReal;
-         periodSum += tempReal * i;
-         i += 1;
+         periodSum += tempReal * rw;
+         rw += 1;
       }
       barsSinceReseed = 8 * optInTimePeriod;
       trailingValue = 0.0;
@@ -755,7 +757,7 @@ static TA_RetCode TA_WMA_OpenImpl( struct TA_WMA_Stream **stream, const double i
             barsSinceReseed = 8 * optInTimePeriod;
             periodSub = (double)0.0;
             periodSum = (double)0.0;
-            rw = 1;
+            rw = 1.0;
             for( j = inIdx - lookbackWin; j <= inIdx; j += 1 )
             {
                tempReal = inReal[j];
@@ -872,8 +874,8 @@ TA_LIB_API TA_RetCode TA_WMA_Peek( const TA_WMA_Stream *stream, double inReal, d
 {
    const struct TA_WMA_Stream *sp = stream;
    int j;
-   int rw;
    double tempReal;
+   double rw;
    int barsSinceReseed;
    double periodSum;
    double *win_j_inReal;
@@ -945,7 +947,7 @@ TA_LIB_API TA_RetCode TA_WMA_Peek( const TA_WMA_Stream *stream, double inReal, d
    {
       barsSinceReseed = 8 * sp->optInTimePeriod;
       periodSum = (double)0.0;
-      rw = 1;
+      rw = 1.0;
       for( j = sp->lookbackWin; j >= 0; j -= 1 )
       {
          tempReal = (((sp->winPos_j + sp->winCap_j - j >= sp->winCap_j) ? sp->winPos_j + sp->winCap_j - j - sp->winCap_j : sp->winPos_j + sp->winCap_j - j) != pkSlot0) ? win_j_inReal[(sp->winPos_j + sp->winCap_j - j >= sp->winCap_j) ? sp->winPos_j + sp->winCap_j - j - sp->winCap_j : sp->winPos_j + sp->winCap_j - j] : pkVal0;
@@ -968,8 +970,8 @@ TA_LIB_API TA_RetCode TA_WMA_Close( TA_WMA_Stream *stream )
 void TA_WMA_StepTape( struct TA_WMA_Stream *sp, const double tape[], int tapeBase, int tapeMask, double inReal, double *outReal )
 {
    int j;
-   int rw;
    double tempReal;
+   double rw;
    double periodSum;
    double periodSub;
 
@@ -1031,7 +1033,7 @@ void TA_WMA_StepTape( struct TA_WMA_Stream *sp, const double tape[], int tapeBas
       sp->barsSinceReseed = 8 * sp->optInTimePeriod;
       periodSub = (double)0.0;
       periodSum = (double)0.0;
-      rw = 1;
+      rw = 1.0;
       for( j = sp->lookbackWin; j >= 0; j -= 1 )
       {
          tempReal = tape[(tapeBase - j) & tapeMask];
@@ -1060,8 +1062,8 @@ void TA_WMA_StepTape( struct TA_WMA_Stream *sp, const double tape[], int tapeBas
 void TA_WMA_PeekTape( const struct TA_WMA_Stream *sp, const double tape[], int tapeBase, int tapeMask, double inReal, double *outReal )
 {
    int j;
-   int rw;
    double tempReal;
+   double rw;
    int barsSinceReseed;
    double periodSum;
    int pkSlot0 = -1;
@@ -1124,7 +1126,7 @@ void TA_WMA_PeekTape( const struct TA_WMA_Stream *sp, const double tape[], int t
    {
       barsSinceReseed = 8 * sp->optInTimePeriod;
       periodSum = (double)0.0;
-      rw = 1;
+      rw = 1.0;
       for( j = sp->lookbackWin; j >= 0; j -= 1 )
       {
          tempReal = (((tapeBase - j) & tapeMask) != pkSlot0) ? tape[(tapeBase - j) & tapeMask] : pkVal0;

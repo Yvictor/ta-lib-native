@@ -147,7 +147,6 @@ impl Core {
         let mut i: usize = 0_usize;
         let mut trailingIdx: usize = 0_usize;
         let mut j: usize = 0_usize;
-        let mut rw: usize = 0_usize;
         let mut lookbackWin: usize = 0_usize;
         let mut barsSinceReseed: usize = 0_usize;
         let mut periodSum: f64 = 0.0_f64;
@@ -155,7 +154,9 @@ impl Core {
         let mut tempReal: f64 = 0.0_f64;
         let mut trailingValue: f64 = 0.0_f64;
         let mut divider: f64 = 0.0_f64;
+        let mut rw: f64 = 0.0_f64;
         let mut lookbackTotal: usize = 0_usize;
+        // Multiplication weights are exact integers no larger than 100000.
         lookbackTotal = (optInTimePeriod - 1) as usize;
         // Move up the start index if there is not
         // enough initial data.
@@ -229,13 +230,13 @@ impl Core {
         periodSub = 0.0 as f64;
         periodSum = periodSub;
         inIdx = trailingIdx;
-        i = 1;
+        rw = 1.0;
         while inIdx < startIdx {
             tempReal = inReal[inIdx];
             inIdx += 1;
             periodSub += tempReal;
-            periodSum += tempReal * ((i) as f64);
-            i += 1;
+            periodSum += tempReal * rw;
+            rw += ((1) as f64);
         }
         barsSinceReseed = (8 * optInTimePeriod) as usize;
         trailingValue = 0.0;
@@ -294,12 +295,12 @@ impl Core {
                 barsSinceReseed = (8 * optInTimePeriod) as usize;
                 periodSub = 0.0 as f64;
                 periodSum = 0.0 as f64;
-                rw = 1;
+                rw = 1.0;
                 for j in (inIdx - lookbackWin as usize)..(inIdx as usize) + 1 {
                     tempReal = inReal[j];
                     periodSub += tempReal;
-                    periodSum += tempReal * ((rw) as f64);
-                    rw += 1;
+                    periodSum += tempReal * rw;
+                    rw += ((1) as f64);
                 }
                 j = (inIdx as usize) + 1;
             }
@@ -464,8 +465,8 @@ struct WmaStreamState {
 impl Core {
     fn wma_step_impl(sp: &mut WmaStreamState, inReal: f64, outReal: &mut f64) {
         let mut j: usize = 0_usize;
-        let mut rw: usize = 0_usize;
         let mut tempReal: f64 = 0.0_f64;
+        let mut rw: f64 = 0.0_f64;
         let mut ringCapL_trailingIdx: usize = 0_usize;
         if sp.optInTimePeriod == 1 {
             (*outReal) = inReal;
@@ -526,14 +527,14 @@ impl Core {
             sp.barsSinceReseed = (8 * sp.optInTimePeriod) as usize;
             sp.periodSub = 0.0 as f64;
             sp.periodSum = 0.0 as f64;
-            rw = 1;
+            rw = 1.0;
             // for( j = sp.lookbackWin; j >= 0; j -= 1 )
             j = sp.lookbackWin;
             loop {
                 tempReal = sp.win_j_inReal[((if sp.winPos_j + sp.winCap_j - j >= sp.winCap_j { sp.winPos_j + sp.winCap_j - j - sp.winCap_j } else { sp.winPos_j + sp.winCap_j - j })) as usize];
                 sp.periodSub += tempReal;
-                sp.periodSum += tempReal * ((rw) as f64);
-                rw += 1;
+                sp.periodSum += tempReal * rw;
+                rw += ((1) as f64);
                 if j == 0 { break; }
                 j -= 1;
             }
@@ -562,8 +563,8 @@ impl Core {
 
     fn wma_step_tape_impl(sp: &mut WmaStreamState, tape: &[f64], tapeBase: usize, tapeMask: usize, inReal: f64, outReal: &mut f64) {
         let mut j: usize = 0_usize;
-        let mut rw: usize = 0_usize;
         let mut tempReal: f64 = 0.0_f64;
+        let mut rw: f64 = 0.0_f64;
         // Add the current price bar to the sum
         // who are carried through the iterations.
         tempReal = inReal;
@@ -617,14 +618,14 @@ impl Core {
             sp.barsSinceReseed = (8 * sp.optInTimePeriod) as usize;
             sp.periodSub = 0.0 as f64;
             sp.periodSum = 0.0 as f64;
-            rw = 1;
+            rw = 1.0;
             // for( j = sp.lookbackWin; j >= 0; j -= 1 )
             j = sp.lookbackWin;
             loop {
                 tempReal = tape[(tapeBase - j & tapeMask) as usize];
                 sp.periodSub += tempReal;
-                sp.periodSum += tempReal * ((rw) as f64);
-                rw += 1;
+                sp.periodSum += tempReal * rw;
+                rw += ((1) as f64);
                 if j == 0 { break; }
                 j -= 1;
             }
@@ -707,7 +708,6 @@ impl Core {
         let mut i: usize = 0_usize;
         let mut trailingIdx: usize = 0_usize;
         let mut j: usize = 0_usize;
-        let mut rw: usize = 0_usize;
         let mut lookbackWin: usize = 0_usize;
         let mut barsSinceReseed: usize = 0_usize;
         let mut periodSum: f64 = 0.0_f64;
@@ -715,7 +715,9 @@ impl Core {
         let mut tempReal: f64 = 0.0_f64;
         let mut trailingValue: f64 = 0.0_f64;
         let mut divider: f64 = 0.0_f64;
+        let mut rw: f64 = 0.0_f64;
         let mut lookbackTotal: usize = 0_usize;
+        // Multiplication weights are exact integers no larger than 100000.
         lookbackTotal = (optInTimePeriod - 1) as usize;
         // Move up the start index if there is not
         // enough initial data.
@@ -764,13 +766,13 @@ impl Core {
         periodSub = 0.0 as f64;
         periodSum = periodSub;
         inIdx = trailingIdx;
-        i = 1;
+        rw = 1.0;
         while inIdx < startIdx {
             tempReal = inReal[inIdx];
             inIdx += 1;
             periodSub += tempReal;
-            periodSum += tempReal * ((i) as f64);
-            i += 1;
+            periodSum += tempReal * rw;
+            rw += ((1) as f64);
         }
         barsSinceReseed = (8 * optInTimePeriod) as usize;
         trailingValue = 0.0;
@@ -829,12 +831,12 @@ impl Core {
                 barsSinceReseed = (8 * optInTimePeriod) as usize;
                 periodSub = 0.0 as f64;
                 periodSum = 0.0 as f64;
-                rw = 1;
+                rw = 1.0;
                 for j in (inIdx - lookbackWin as usize)..(inIdx as usize) + 1 {
                     tempReal = inReal[j];
                     periodSub += tempReal;
-                    periodSum += tempReal * ((rw) as f64);
-                    rw += 1;
+                    periodSum += tempReal * rw;
+                    rw += ((1) as f64);
                 }
                 j = (inIdx as usize) + 1;
             }
@@ -1050,8 +1052,8 @@ impl WmaStream {
             let sp = &self.state;
             let outReal = &mut outReal;
             let mut j: usize = 0_usize;
-            let mut rw: usize = 0_usize;
             let mut tempReal: f64 = 0.0_f64;
+            let mut rw: f64 = 0.0_f64;
             let mut barsSinceReseed = sp.barsSinceReseed;
             let mut periodSub = sp.periodSub;
             let mut periodSum = sp.periodSum;
@@ -1117,14 +1119,14 @@ impl WmaStream {
                 barsSinceReseed = (8 * sp.optInTimePeriod) as usize;
                 periodSub = 0.0 as f64;
                 periodSum = 0.0 as f64;
-                rw = 1;
+                rw = 1.0;
                 // for( j = sp.lookbackWin; j >= 0; j -= 1 )
                 j = sp.lookbackWin;
                 loop {
                     tempReal = (if ((if sp.winPos_j + sp.winCap_j - j >= sp.winCap_j { sp.winPos_j + sp.winCap_j - j - sp.winCap_j } else { sp.winPos_j + sp.winCap_j - j }) as usize) != pkSlot0 { sp.win_j_inReal[((if sp.winPos_j + sp.winCap_j - j >= sp.winCap_j { sp.winPos_j + sp.winCap_j - j - sp.winCap_j } else { sp.winPos_j + sp.winCap_j - j })) as usize] } else { pkVal0 });
                     periodSub += tempReal;
-                    periodSum += tempReal * ((rw) as f64);
-                    rw += 1;
+                    periodSum += tempReal * rw;
+                    rw += ((1) as f64);
                     if j == 0 { break; }
                     j -= 1;
                 }
@@ -1212,8 +1214,8 @@ impl WmaStream {
             let sp = &self.state;
             let outReal = &mut outReal;
             let mut j: usize = 0_usize;
-            let mut rw: usize = 0_usize;
             let mut tempReal: f64 = 0.0_f64;
+            let mut rw: f64 = 0.0_f64;
             let mut barsSinceReseed = sp.barsSinceReseed;
             let mut periodSub = sp.periodSub;
             let mut periodSum = sp.periodSum;
@@ -1275,14 +1277,14 @@ impl WmaStream {
                 barsSinceReseed = (8 * sp.optInTimePeriod) as usize;
                 periodSub = 0.0 as f64;
                 periodSum = 0.0 as f64;
-                rw = 1;
+                rw = 1.0;
                 // for( j = sp.lookbackWin; j >= 0; j -= 1 )
                 j = sp.lookbackWin;
                 loop {
                     tempReal = (if ((tapeBase - j & tapeMask) as usize) != pkSlot0 { tape[(tapeBase - j & tapeMask) as usize] } else { pkVal0 });
                     periodSub += tempReal;
-                    periodSum += tempReal * ((rw) as f64);
-                    rw += 1;
+                    periodSum += tempReal * rw;
+                    rw += ((1) as f64);
                     if j == 0 { break; }
                     j -= 1;
                 }

@@ -28,8 +28,10 @@ TA_RetCode wma(int startIdx, int endIdx,
    double outReal[])
 {
    int inIdx, outIdx, i, trailingIdx;
-   int j, rw, lookbackWin, barsSinceReseed;
+   int j, lookbackWin, barsSinceReseed;
    double periodSum, periodSub, tempReal, trailingValue, divider;
+   /* Multiplication weights are exact integers no larger than 100000. */
+   double rw;
    int lookbackTotal;
 
    lookbackTotal = optInTimePeriod-1;
@@ -108,14 +110,14 @@ TA_RetCode wma(int startIdx, int endIdx,
    lookbackWin = optInTimePeriod - 1;
    periodSum = periodSub = (double)0.0;
    inIdx=trailingIdx;
-   i = 1;
+   rw = 1.0;
    while( inIdx < startIdx )
    {
       tempReal = inReal[inIdx];
       inIdx++;
       periodSub += tempReal;
-      periodSum += tempReal*i;
-      i++;
+      periodSum += tempReal*rw;
+      rw++;
    }
    barsSinceReseed = 8 * optInTimePeriod;
    trailingValue = 0.0;
@@ -180,7 +182,7 @@ TA_RetCode wma(int startIdx, int endIdx,
          barsSinceReseed = 8 * optInTimePeriod;
          periodSub = (double)0.0;
          periodSum = (double)0.0;
-         rw = 1;
+         rw = 1.0;
          for( j = inIdx - lookbackWin; j <= inIdx; j++ )
          {
             tempReal = inReal[j];

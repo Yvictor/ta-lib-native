@@ -227355,7 +227355,6 @@ class Core {
           int i = 0;
           int trailingIdx = 0;
           int j = 0;
-          int rw = 0;
           int lookbackWin = 0;
           int barsSinceReseed = 0;
           double periodSum = 0;
@@ -227363,6 +227362,7 @@ class Core {
           double tempReal = 0;
           double trailingValue = 0;
           double divider = 0;
+          double rw = 0;
           int lookbackTotal = 0;
           if( (startIdx < 0) || (startIdx > INDEX_MAX) ) {
              return RetCode.OUT_OF_RANGE_START_INDEX ;
@@ -227375,6 +227375,7 @@ class Core {
           } else if( optInTimePeriod < 1 || optInTimePeriod > 100000 ) {
              return RetCode.BAD_PARAM;
           }
+          /* Multiplication weights are exact integers no larger than 100000. */
           lookbackTotal = optInTimePeriod - 1;
           /* Move up the start index if there is not
            * enough initial data.
@@ -227444,13 +227445,13 @@ class Core {
           periodSub = (double)0.0;
           periodSum = periodSub;
           inIdx = trailingIdx;
-          i = 1;
+          rw = 1.0;
           while( inIdx < startIdx ) {
              tempReal = inReal[inIdx];
              inIdx += 1;
              periodSub += tempReal;
-             periodSum += tempReal * i;
-             i += 1;
+             periodSum += tempReal * rw;
+             rw += 1;
           }
           barsSinceReseed = 8 * optInTimePeriod;
           trailingValue = 0.0;
@@ -227511,7 +227512,7 @@ class Core {
                 barsSinceReseed = 8 * optInTimePeriod;
                 periodSub = (double)0.0;
                 periodSum = (double)0.0;
-                rw = 1;
+                rw = 1.0;
                 for( j = inIdx - lookbackWin; j <= inIdx; j += 1 ) {
                    tempReal = inReal[j];
                    periodSub += tempReal;
@@ -227550,7 +227551,6 @@ class Core {
           int i = 0;
           int trailingIdx = 0;
           int j = 0;
-          int rw = 0;
           int lookbackWin = 0;
           int barsSinceReseed = 0;
           double periodSum = 0;
@@ -227558,6 +227558,7 @@ class Core {
           double tempReal = 0;
           double trailingValue = 0;
           double divider = 0;
+          double rw = 0;
           int lookbackTotal = 0;
           if( (startIdx < 0) || (startIdx > INDEX_MAX) ) {
              return RetCode.OUT_OF_RANGE_START_INDEX ;
@@ -227595,13 +227596,13 @@ class Core {
           periodSub = (double)0.0;
           periodSum = periodSub;
           inIdx = trailingIdx;
-          i = 1;
+          rw = 1.0;
           while( inIdx < startIdx ) {
              tempReal = (double)inReal[inIdx];
              inIdx += 1;
              periodSub += tempReal;
-             periodSum += tempReal * i;
-             i += 1;
+             periodSum += tempReal * rw;
+             rw += 1;
           }
           barsSinceReseed = 8 * optInTimePeriod;
           trailingValue = 0.0;
@@ -227615,7 +227616,7 @@ class Core {
                 barsSinceReseed = 8 * optInTimePeriod;
                 periodSub = (double)0.0;
                 periodSum = (double)0.0;
-                rw = 1;
+                rw = 1.0;
                 for( j = inIdx - lookbackWin; j <= inIdx; j += 1 ) {
                    tempReal = (double)inReal[j];
                    periodSub += tempReal;
@@ -227894,8 +227895,8 @@ class Core {
                 throw nonFiniteBar("WMA peek", "inReal");
              WmaStream sp = this;
              int j = 0;
-             int rw = 0;
              double tempReal = 0.0;
+             double rw = 0.0;
              int barsSinceReseed = sp.barsSinceReseed;
              double cur_outReal = 0.0;
              double periodSub = sp.periodSub;
@@ -227964,7 +227965,7 @@ class Core {
                 barsSinceReseed = 8 * sp.optInTimePeriod;
                 periodSub = (double)0.0;
                 periodSum = (double)0.0;
-                rw = 1;
+                rw = 1.0;
                 for( j = sp.lookbackWin; j >= 0; j -= 1 ) {
                    tempReal = (((sp.winPos_j + sp.winCap_j - j >= sp.winCap_j) ? sp.winPos_j + sp.winCap_j - j - sp.winCap_j : sp.winPos_j + sp.winCap_j - j) != pkSlot0) ? sp.win_j_inReal[(sp.winPos_j + sp.winCap_j - j >= sp.winCap_j) ? sp.winPos_j + sp.winCap_j - j - sp.winCap_j : sp.winPos_j + sp.winCap_j - j] : pkVal0;
                    periodSub += tempReal;
@@ -228012,8 +228013,8 @@ class Core {
        private void wmaStepImpl( WmaStream sp, double inReal )
        {
           int j = 0;
-          int rw = 0;
           double tempReal = 0.0;
+          double rw = 0.0;
           int ringCapL_trailingIdx = 0;
           if( sp.optInTimePeriod == 1 ) {
              sp.cur_outReal = inReal;
@@ -228075,7 +228076,7 @@ class Core {
              sp.barsSinceReseed = 8 * sp.optInTimePeriod;
              sp.periodSub = (double)0.0;
              sp.periodSum = (double)0.0;
-             rw = 1;
+             rw = 1.0;
              for( j = sp.lookbackWin; j >= 0; j -= 1 ) {
                 tempReal = sp.win_j_inReal[(sp.winPos_j + sp.winCap_j - j >= sp.winCap_j) ? sp.winPos_j + sp.winCap_j - j - sp.winCap_j : sp.winPos_j + sp.winCap_j - j];
                 sp.periodSub += tempReal;
@@ -228111,7 +228112,6 @@ class Core {
           int i = 0;
           int trailingIdx = 0;
           int j = 0;
-          int rw = 0;
           int lookbackWin = 0;
           int barsSinceReseed = 0;
           double periodSum = 0;
@@ -228119,6 +228119,7 @@ class Core {
           double tempReal = 0;
           double trailingValue = 0;
           double divider = 0;
+          double rw = 0;
           int lookbackTotal = 0;
           int historyLen = inReal.length;
           int endIdx = historyLen - 1;
@@ -228169,6 +228170,7 @@ class Core {
              sp.cur_outReal = outReal[(outNBElement.value - 1) * outStride];
              return RetCode.SUCCESS;
           }
+          /* Multiplication weights are exact integers no larger than 100000. */
           lookbackTotal = optInTimePeriod - 1;
           /* Move up the start index if there is not
            * enough initial data.
@@ -228220,13 +228222,13 @@ class Core {
           periodSub = (double)0.0;
           periodSum = periodSub;
           inIdx = trailingIdx;
-          i = 1;
+          rw = 1.0;
           while( inIdx < startIdx ) {
              tempReal = inReal[inIdx];
              inIdx += 1;
              periodSub += tempReal;
-             periodSum += tempReal * i;
-             i += 1;
+             periodSum += tempReal * rw;
+             rw += 1;
           }
           barsSinceReseed = 8 * optInTimePeriod;
           trailingValue = 0.0;
@@ -228287,7 +228289,7 @@ class Core {
                 barsSinceReseed = 8 * optInTimePeriod;
                 periodSub = (double)0.0;
                 periodSum = (double)0.0;
-                rw = 1;
+                rw = 1.0;
                 for( j = inIdx - lookbackWin; j <= inIdx; j += 1 ) {
                    tempReal = inReal[j];
                    periodSub += tempReal;
@@ -228420,8 +228422,8 @@ class Core {
        private double wmaStepTape( WmaStream sp, double[] tape, int tapeBase, int tapeMask, double inReal )
        {
           int j = 0;
-          int rw = 0;
           double tempReal = 0.0;
+          double rw = 0.0;
           /* Add the current price bar to the sum
            * who are carried through the iterations.
            */
@@ -228477,7 +228479,7 @@ class Core {
              sp.barsSinceReseed = 8 * sp.optInTimePeriod;
              sp.periodSub = (double)0.0;
              sp.periodSum = (double)0.0;
-             rw = 1;
+             rw = 1.0;
              for( j = sp.lookbackWin; j >= 0; j -= 1 ) {
                 tempReal = tape[(tapeBase - j) & tapeMask];
                 sp.periodSub += tempReal;
@@ -228501,8 +228503,8 @@ class Core {
        private double wmaPeekTape( WmaStream sp, double[] tape, int tapeBase, int tapeMask, double inReal )
        {
           int j = 0;
-          int rw = 0;
           double tempReal = 0.0;
+          double rw = 0.0;
           int barsSinceReseed = sp.barsSinceReseed;
           double cur_outReal = 0.0;
           double periodSub = sp.periodSub;
@@ -228567,7 +228569,7 @@ class Core {
              barsSinceReseed = 8 * sp.optInTimePeriod;
              periodSub = (double)0.0;
              periodSum = (double)0.0;
-             rw = 1;
+             rw = 1.0;
              for( j = sp.lookbackWin; j >= 0; j -= 1 ) {
                 tempReal = (((tapeBase - j) & tapeMask) != pkSlot0) ? tape[(tapeBase - j) & tapeMask] : pkVal0;
                 periodSub += tempReal;
@@ -230421,7 +230423,7 @@ class Core {
 
 public class TaCodegenServe {
     static Core core = new Core();
-    static final String SPLICED_GENCODE_DIGEST = "2ee7a4d148242d1f";
+    static final String SPLICED_GENCODE_DIGEST = "2bf51495b31bd005";
     static final int MAX_ARRAY_SIZE = 200000;
     static double[] refOpen = new double[MAX_ARRAY_SIZE];
     static double[] refHigh = new double[MAX_ARRAY_SIZE];
