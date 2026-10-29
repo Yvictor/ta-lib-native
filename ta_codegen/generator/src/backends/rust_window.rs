@@ -1387,7 +1387,7 @@ mod tests {
         let cond = bin(v("i"), BinOp::Less, v("e"));
         let body = vec![
             set(v("x"), at("in", v("i"))),
-            branch(v("c"), vec![set(v("y"), v("x"))], vec![set(v("y"), int(0))]),
+            branch(bin(v("x"), BinOp::Greater, int(0)), vec![set(v("y"), v("x"))], vec![set(v("y"), int(0))]),
             set(at("out", v("k")), v("y")),
             set(at("outInt", v("k")), int(-1)),
             inc("i"),
