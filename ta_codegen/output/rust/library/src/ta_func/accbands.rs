@@ -233,40 +233,52 @@ impl Core {
         // Note that this algorithm allows the input and output to be the
         // same buffer: every trailing bar is read before any output is written.
         outIdx = 0;
-        while i <= endIdx {
-            // Add the incoming bar to each running sum.
-            tempReal = inHigh[i] + inLow[i];
-            if !(((tempReal).abs() <= 1e-14 * ((inHigh[i]).abs() + (inLow[i]).abs()))) {
-                tempReal = 4_f64 * (inHigh[i] - inLow[i]) / tempReal;
-                periodTotalUpper += inHigh[i] * (1_f64 + tempReal);
-                periodTotalLower += inLow[i] * (1_f64 - tempReal);
-            } else {
-                periodTotalUpper += inHigh[i];
-                periodTotalLower += inLow[i];
+        if i <= endIdx {
+            let _wn: usize = endIdx - i + 1;
+            let _w0 = &inClose[i..][.._wn];
+            let _w1 = &inClose[trailingIdx..][.._wn];
+            let _w2 = &inHigh[i..][.._wn];
+            let _w3 = &inHigh[trailingIdx..][.._wn];
+            let _w4 = &inLow[i..][.._wn];
+            let _w5 = &inLow[trailingIdx..][.._wn];
+            let _w6 = &mut outRealLowerBand[outIdx..][.._wn];
+            let _w7 = &mut outRealMiddleBand[outIdx..][.._wn];
+            let _w8 = &mut outRealUpperBand[outIdx..][.._wn];
+            for _wk in 0.._wn {
+                // Add the incoming bar to each running sum.
+                tempReal = _w2[_wk] + _w4[_wk];
+                if !(((tempReal).abs() <= 1e-14 * ((_w2[_wk]).abs() + (_w4[_wk]).abs()))) {
+                    tempReal = 4_f64 * (inHigh[i] - inLow[i]) / tempReal;
+                    periodTotalUpper += inHigh[i] * (1_f64 + tempReal);
+                    periodTotalLower += inLow[i] * (1_f64 - tempReal);
+                } else {
+                    periodTotalUpper += inHigh[i];
+                    periodTotalLower += inLow[i];
+                }
+                periodTotalMiddle += _w0[_wk];
+                i = i + 1;
+                // Record the current window sums.
+                tempUpper = periodTotalUpper;
+                tempMiddle = periodTotalMiddle;
+                tempLower = periodTotalLower;
+                // Remove the trailing bar from each running sum.
+                tempReal = _w3[_wk] + _w5[_wk];
+                if !(((tempReal).abs() <= 1e-14 * ((_w3[_wk]).abs() + (_w5[_wk]).abs()))) {
+                    tempReal = 4_f64 * (inHigh[trailingIdx] - inLow[trailingIdx]) / tempReal;
+                    periodTotalUpper -= inHigh[trailingIdx] * (1_f64 + tempReal);
+                    periodTotalLower -= inLow[trailingIdx] * (1_f64 - tempReal);
+                } else {
+                    periodTotalUpper -= inHigh[trailingIdx];
+                    periodTotalLower -= inLow[trailingIdx];
+                }
+                periodTotalMiddle -= _w1[_wk];
+                trailingIdx = trailingIdx + 1;
+                // Write the three bands.
+                _w8[_wk] = tempUpper / (optInTimePeriod as f64);
+                _w7[_wk] = tempMiddle / (optInTimePeriod as f64);
+                _w6[_wk] = tempLower / (optInTimePeriod as f64);
+                outIdx = outIdx + 1;
             }
-            periodTotalMiddle += inClose[i];
-            i = i + 1;
-            // Record the current window sums.
-            tempUpper = periodTotalUpper;
-            tempMiddle = periodTotalMiddle;
-            tempLower = periodTotalLower;
-            // Remove the trailing bar from each running sum.
-            tempReal = inHigh[trailingIdx] + inLow[trailingIdx];
-            if !(((tempReal).abs() <= 1e-14 * ((inHigh[trailingIdx]).abs() + (inLow[trailingIdx]).abs()))) {
-                tempReal = 4_f64 * (inHigh[trailingIdx] - inLow[trailingIdx]) / tempReal;
-                periodTotalUpper -= inHigh[trailingIdx] * (1_f64 + tempReal);
-                periodTotalLower -= inLow[trailingIdx] * (1_f64 - tempReal);
-            } else {
-                periodTotalUpper -= inHigh[trailingIdx];
-                periodTotalLower -= inLow[trailingIdx];
-            }
-            periodTotalMiddle -= inClose[trailingIdx];
-            trailingIdx = trailingIdx + 1;
-            // Write the three bands.
-            outRealUpperBand[outIdx] = tempUpper / (optInTimePeriod as f64);
-            outRealMiddleBand[outIdx] = tempMiddle / (optInTimePeriod as f64);
-            outRealLowerBand[outIdx] = tempLower / (optInTimePeriod as f64);
-            outIdx = outIdx + 1;
         }
         (*outBegIdx) = startIdx;
         (*outNBElement) = outIdx;

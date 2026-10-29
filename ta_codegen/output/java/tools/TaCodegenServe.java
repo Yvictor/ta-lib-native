@@ -202206,6 +202206,7 @@ class Core {
           int outIdx = 0;
           int lookbackTotal = 0;
           int isUptrend = 0;
+          int emittedTrend = 0;
           double prevATR = 0;
           double periodTotal = 0;
           double wAlpha = 0;
@@ -202224,6 +202225,7 @@ class Core {
           double finalLower = 0;
           double closeToday = 0;
           double prevClose = 0;
+          double emittedSupertrend = 0;
           if( (startIdx < 0) || (startIdx > INDEX_MAX) ) {
              return RetCode.OUT_OF_RANGE_START_INDEX ;
           }
@@ -202371,12 +202373,14 @@ class Core {
                 isUptrend = 1;
              }
              if( (isUptrend) != 0 ) {
-                outSupertrend[outIdx] = finalLower;
-                outTrend[outIdx] = 1;
+                emittedSupertrend = finalLower;
+                emittedTrend = 1;
              } else {
-                outSupertrend[outIdx] = finalUpper;
-                outTrend[outIdx] = -1;
+                emittedSupertrend = finalUpper;
+                emittedTrend = -1;
              }
+             outSupertrend[outIdx] = emittedSupertrend;
+             outTrend[outIdx] = emittedTrend;
              prevClose = closeToday;
              outIdx += 1;
              today += 1;
@@ -202402,6 +202406,7 @@ class Core {
           int outIdx = 0;
           int lookbackTotal = 0;
           int isUptrend = 0;
+          int emittedTrend = 0;
           double prevATR = 0;
           double periodTotal = 0;
           double wAlpha = 0;
@@ -202420,6 +202425,7 @@ class Core {
           double finalLower = 0;
           double closeToday = 0;
           double prevClose = 0;
+          double emittedSupertrend = 0;
           if( (startIdx < 0) || (startIdx > INDEX_MAX) ) {
              return RetCode.OUT_OF_RANGE_START_INDEX ;
           }
@@ -202528,12 +202534,14 @@ class Core {
                 isUptrend = 1;
              }
              if( (isUptrend) != 0 ) {
-                outSupertrend[outIdx] = finalLower;
-                outTrend[outIdx] = 1;
+                emittedSupertrend = finalLower;
+                emittedTrend = 1;
              } else {
-                outSupertrend[outIdx] = finalUpper;
-                outTrend[outIdx] = -1;
+                emittedSupertrend = finalUpper;
+                emittedTrend = -1;
              }
+             outSupertrend[outIdx] = emittedSupertrend;
+             outTrend[outIdx] = emittedTrend;
              prevClose = closeToday;
              outIdx += 1;
              today += 1;
@@ -202849,6 +202857,7 @@ class Core {
              if( !Double.isFinite(inHigh) || !Double.isFinite(inLow) || !Double.isFinite(inClose) )
                 throw nonFiniteBar("SUPERTREND peek", !Double.isFinite(inHigh) ? "inHigh" : !Double.isFinite(inLow) ? "inLow" : "inClose");
              SupertrendStream sp = this;
+             int emittedTrend = 0;
              double val2 = 0.0;
              double val3 = 0.0;
              double greatest = 0.0;
@@ -202860,6 +202869,7 @@ class Core {
              double basicUpper = 0.0;
              double basicLower = 0.0;
              double closeToday = 0.0;
+             double emittedSupertrend = 0.0;
              double cur_outSupertrend = 0.0;
              int cur_outTrend = 0;
              double finalLower = sp.finalLower;
@@ -202914,12 +202924,14 @@ class Core {
                 isUptrend = 1;
              }
              if( (isUptrend) != 0 ) {
-                cur_outSupertrend = finalLower;
-                cur_outTrend = 1;
+                emittedSupertrend = finalLower;
+                emittedTrend = 1;
              } else {
-                cur_outSupertrend = finalUpper;
-                cur_outTrend = -1;
+                emittedSupertrend = finalUpper;
+                emittedTrend = -1;
              }
+             cur_outSupertrend = emittedSupertrend;
+             cur_outTrend = emittedTrend;
              out.supertrend = cur_outSupertrend;
              out.trend = cur_outTrend;
           }
@@ -202976,6 +202988,7 @@ class Core {
        }
        private void supertrendStepImpl( SupertrendStream sp, double inHigh, double inLow, double inClose )
        {
+          int emittedTrend = 0;
           double val2 = 0.0;
           double val3 = 0.0;
           double greatest = 0.0;
@@ -202987,6 +203000,7 @@ class Core {
           double basicUpper = 0.0;
           double basicLower = 0.0;
           double closeToday = 0.0;
+          double emittedSupertrend = 0.0;
           tempLT = inLow;
           tempHT = inHigh;
           tempCY = sp.lag1_inClose;
@@ -203035,12 +203049,14 @@ class Core {
              sp.isUptrend = 1;
           }
           if( (sp.isUptrend) != 0 ) {
-             sp.cur_outSupertrend = sp.finalLower;
-             sp.cur_outTrend = 1;
+             emittedSupertrend = sp.finalLower;
+             emittedTrend = 1;
           } else {
-             sp.cur_outSupertrend = sp.finalUpper;
-             sp.cur_outTrend = -1;
+             emittedSupertrend = sp.finalUpper;
+             emittedTrend = -1;
           }
+          sp.cur_outSupertrend = emittedSupertrend;
+          sp.cur_outTrend = emittedTrend;
           sp.prevClose = closeToday;
           sp.lag1_inClose = inClose;
        }
@@ -203051,6 +203067,7 @@ class Core {
           int outIdx = 0;
           int lookbackTotal = 0;
           int isUptrend = 0;
+          int emittedTrend = 0;
           double prevATR = 0;
           double periodTotal = 0;
           double wAlpha = 0;
@@ -203069,6 +203086,7 @@ class Core {
           double finalLower = 0;
           double closeToday = 0;
           double prevClose = 0;
+          double emittedSupertrend = 0;
           int historyLen = inHigh.length;
           int endIdx = historyLen - 1;
           if( historyLen < 1 ) {
@@ -203226,12 +203244,14 @@ class Core {
                 isUptrend = 1;
              }
              if( (isUptrend) != 0 ) {
-                outSupertrend[outIdx * outStride] = finalLower;
-                outTrend[outIdx * outStride] = 1;
+                emittedSupertrend = finalLower;
+                emittedTrend = 1;
              } else {
-                outSupertrend[outIdx * outStride] = finalUpper;
-                outTrend[outIdx * outStride] = -1;
+                emittedSupertrend = finalUpper;
+                emittedTrend = -1;
              }
+             outSupertrend[outIdx * outStride] = emittedSupertrend;
+             outTrend[outIdx * outStride] = emittedTrend;
              prevClose = closeToday;
              outIdx += 1;
              today += 1;
@@ -230421,7 +230441,7 @@ class Core {
 
 public class TaCodegenServe {
     static Core core = new Core();
-    static final String SPLICED_GENCODE_DIGEST = "2ee7a4d148242d1f";
+    static final String SPLICED_GENCODE_DIGEST = "d91436d45c919c62";
     static final int MAX_ARRAY_SIZE = 200000;
     static double[] refOpen = new double[MAX_ARRAY_SIZE];
     static double[] refHigh = new double[MAX_ARRAY_SIZE];

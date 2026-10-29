@@ -369,37 +369,45 @@ impl Core {
             today = today + 1;
         }
         outIdx = 0;
-        while today <= endIdx {
-            hlc = inHigh[today] + inLow[today] + inClose[today];
-            dmToday = inHigh[today] - inLow[today];
-            if hlc > prevHlc {
-                trend = 1.0;
-            } else if hlc < prevHlc {
-                trend = -1.0;
-            } else {
-                trend = prevTrend;
+        if today <= endIdx {
+            let _wn: usize = endIdx - today + 1;
+            let _w0 = &inClose[today..][.._wn];
+            let _w1 = &inHigh[today..][.._wn];
+            let _w2 = &inLow[today..][.._wn];
+            let _w3 = &mut outKVO[outIdx..][.._wn];
+            let _w4 = &mut outKVOSignal[outIdx..][.._wn];
+            for _wk in 0.._wn {
+                hlc = _w1[_wk] + _w2[_wk] + _w0[_wk];
+                dmToday = _w1[_wk] - _w2[_wk];
+                if hlc > prevHlc {
+                    trend = 1.0;
+                } else if hlc < prevHlc {
+                    trend = -1.0;
+                } else {
+                    trend = prevTrend;
+                }
+                if trend != prevTrend {
+                    cm = prevDm + dmToday;
+                } else {
+                    cm = cm + dmToday;
+                }
+                if cm == 0.0 {
+                    vf = 0.0;
+                } else {
+                    vf = inVolume[today] * (2.0 * (dmToday / cm) - 1.0).abs() * 100.0 * trend;
+                }
+                emaFast = (betaFast as f64).mul_add(emaFast, kFast * vf);
+                emaSlow = (betaSlow as f64).mul_add(emaSlow, kSlow * vf);
+                kvoValue = emaFast - emaSlow;
+                signalValue = (betaSignal as f64).mul_add(signalValue, kSignal * kvoValue);
+                _w3[_wk] = kvoValue;
+                _w4[_wk] = signalValue;
+                outIdx = outIdx + 1;
+                prevHlc = hlc;
+                prevDm = dmToday;
+                prevTrend = trend;
+                today = today + 1;
             }
-            if trend != prevTrend {
-                cm = prevDm + dmToday;
-            } else {
-                cm = cm + dmToday;
-            }
-            if cm == 0.0 {
-                vf = 0.0;
-            } else {
-                vf = inVolume[today] * (2.0 * (dmToday / cm) - 1.0).abs() * 100.0 * trend;
-            }
-            emaFast = (betaFast as f64).mul_add(emaFast, kFast * vf);
-            emaSlow = (betaSlow as f64).mul_add(emaSlow, kSlow * vf);
-            kvoValue = emaFast - emaSlow;
-            signalValue = (betaSignal as f64).mul_add(signalValue, kSignal * kvoValue);
-            outKVO[outIdx] = kvoValue;
-            outKVOSignal[outIdx] = signalValue;
-            outIdx = outIdx + 1;
-            prevHlc = hlc;
-            prevDm = dmToday;
-            prevTrend = trend;
-            today = today + 1;
         }
         (*outNBElement) = outIdx;
         (*outBegIdx) = startIdx;

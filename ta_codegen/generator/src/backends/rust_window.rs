@@ -90,6 +90,8 @@ pub(crate) struct Names<'a> {
     pub sliceable: &'a dyn Fn(&str) -> bool,
     /// One of the inputs that all have one length here.
     pub same_len: &'a dyn Fn(&str) -> bool,
+    /// Actual public output arrays from function metadata, not scratch writes.
+    pub outputs: &'a [String],
     /// The storage a CIRCBUF's wrap reads the length of, by ring id.
     pub ring_storage: &'a dyn Fn(&str) -> Option<String>,
 }
@@ -418,6 +420,8 @@ struct Facts {
     steps: BTreeMap<String, Vec<i64>>,
     /// Arrays with an element stored.
     written: BTreeSet<String>,
+    /// Direct stores in this statement list, excluding stores inside arms.
+    every_stores: BTreeMap<String, usize>,
     /// Names used other than as the array of an element access.
     bare: BTreeSet<String>,
 }
@@ -449,6 +453,7 @@ impl Facts {
                     Expr::PointerDeref(t) => self.store(t),
                     Expr::ArrayAccess(a, i) => {
                         self.written.insert(a.clone());
+                        *self.every_stores.entry(a.clone()).or_default() += 1;
                         self.expr(i, trailing_step(s));
                     }
                     _ => {}
@@ -686,7 +691,16 @@ impl Analysis<'_> {
         // A body with varying branches is windowed only for reads some passes skip: for
         // every-pass reads alone, LLVM re-forms the branch once their checks go,
         // which measured slower.
-        if self.branches && !checked {
+        // Multiple public outputs written once per pass retain independent
+        // bounds checks even when their input reads are already bounded. Their
+        // common stores may use the windows proved above. Keep the heuristic
+        // for scratch writes and for missing, repeated or conditional outputs.
+        let outputs: BTreeSet<_> = self.names.outputs.iter().collect();
+        let paired_outputs = outputs.len() >= 2 && outputs.iter().all(|a| {
+            self.facts.every_stores.get(a.as_str()) == Some(&1)
+                && own.keys().filter(|g| &g.array == *a).count() == 1
+        });
+        if self.branches && !checked && !paired_outputs {
             return None;
         }
 
@@ -965,6 +979,10 @@ mod tests {
     /// `i`, `j`, `k`, `n`, `e`, `b` are `usize`; `in`, `in2` inputs of one
     /// length; `out` an output; `ring` the storage of ring `r`.
     fn run_full(cond: &Expr, body: &[Statement], update: Option<&Statement>, same_len: bool) -> Option<Plan> {
+        run_full_outputs(cond, body, update, same_len, &["out"])
+    }
+    fn run_full_outputs(cond: &Expr, body: &[Statement], update: Option<&Statement>, same_len: bool, outputs: &[&str]) -> Option<Plan> {
+        let outputs: Vec<String> = outputs.iter().map(|n| (*n).to_string()).collect();
         let index = |n: &str| ["i", "j", "k", "n", "e", "b"].contains(&n);
         let usize_expr = |x: &Expr| {
             matches!(x, Expr::IntLiteral(_) | Expr::PointerDeref(_) | Expr::FuncCall(..))
@@ -980,6 +998,7 @@ mod tests {
             castable: &castable,
             sliceable: &sliceable,
             same_len: &pool,
+            outputs: &outputs,
             ring_storage: &ring,
         };
         plan(cond, body, update, &names)
@@ -1360,6 +1379,60 @@ mod tests {
         // Without the branch the same reads are windowed.
         let straight = [body[0].clone(), body[2].clone(), body[3].clone(), body[4].clone()];
         assert!(run(&bin(v("i"), BinOp::Less, v("e")), &straight).is_some());
+    }
+
+    #[test]
+    fn paired_public_outputs_require_one_proven_store_each_on_every_pass() {
+        // Metadata identifies both outputs; their element kinds are irrelevant.
+        let cond = bin(v("i"), BinOp::Less, v("e"));
+        let body = vec![
+            set(v("x"), at("in", v("i"))),
+            branch(v("c"), vec![set(v("y"), v("x"))], vec![set(v("y"), int(0))]),
+            set(at("out", v("k")), v("y")),
+            set(at("outInt", v("k")), int(-1)),
+            inc("i"),
+            inc("k"),
+        ];
+        let run = |b: &[Statement], outputs: &[&str]| run_full_outputs(&cond, b, None, true, outputs);
+        let outputs = ["out", "outInt"];
+        let p = run(&body, &outputs).expect("paired output windows");
+        assert!(!p.checked);
+        assert_eq!(p.windows.iter().filter(|w| w.mutable).count(), 2);
+        assert_eq!(text(&p.guard), text(&cond));
+        // Duplicate names do not make one public output into a pair.
+        assert!(run(&body, &["out", "out"]).is_none());
+        assert!(run(&body, &["out"]).is_none());
+        assert!(run(&body, &["out", "outInt", "missing"]).is_none());
+        let mut missing = body.clone(); missing.remove(3);
+        assert!(run(&missing, &outputs).is_none());
+        let mut conditional = body.clone();
+        conditional[3] = branch(v("c"), vec![body[3].clone()], vec![]);
+        assert!(run(&conditional, &outputs).is_none());
+        let mut duplicate = body.clone(); duplicate.insert(4, body[3].clone());
+        assert!(run(&duplicate, &outputs).is_none());
+        let mut scratch = body.clone();
+        scratch.insert(4, set(at("scratch1", v("k")), int(1)));
+        scratch.insert(4, set(at("scratch2", v("k")), int(2)));
+        assert!(run(&scratch, &["out"]).is_none());
+        let mut escaped = body.clone();
+        escaped.insert(4, Statement::Expr(Expr::AddressOf(Box::new(at("outInt", v("k"))))));
+        assert!(run(&escaped, &outputs).is_none());
+        let mut effect = body.clone();
+        effect.insert(4, Statement::Expr(Expr::FuncCall("effect".into(), vec![v("outInt")])));
+        assert!(run(&effect, &outputs).is_none());
+        let mut arm_read = body.clone();
+        arm_read.insert(4, branch(v("c"), vec![set(v("z"), at("outInt", v("k")))], vec![]));
+        assert!(run(&arm_read, &outputs).is_none());
+        let mut unfitted = body.clone();
+        unfitted.insert(4, set(v("z"), at("outInt", v("j"))));
+        assert!(run(&unfitted, &outputs).is_none());
+        let mut multi_group = body.clone();
+        multi_group.insert(4, set(v("z"), at("outInt", v("i"))));
+        assert!(run(&multi_group, &outputs).is_none());
+        // Conditional extents still use the existing checked/fallback plan.
+        let mut checked = body.clone();
+        checked.insert(4, set(v("z"), Expr::Ternary(Box::new(v("c")), Box::new(at("outInt", plus(v("k"), int(1)))), Box::new(int(0)))));
+        assert!(run(&checked, &outputs).expect("checked fallback retained").checked);
     }
 
     #[test]

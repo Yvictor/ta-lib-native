@@ -2964,6 +2964,7 @@ impl RustStmt<'_, '_> {
             castable: &castable,
             sliceable: &sliceable,
             same_len: &same_len,
+            outputs: self.output_names,
             ring_storage: &ring_storage,
         };
         let plan = super::rust_window::plan(condition, body, update, &names)?;

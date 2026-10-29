@@ -88,6 +88,7 @@
       int outIdx = 0;
       int lookbackTotal = 0;
       int isUptrend = 0;
+      int emittedTrend = 0;
       double prevATR = 0;
       double periodTotal = 0;
       double wAlpha = 0;
@@ -106,6 +107,7 @@
       double finalLower = 0;
       double closeToday = 0;
       double prevClose = 0;
+      double emittedSupertrend = 0;
       if( (startIdx < 0) || (startIdx > INDEX_MAX) ) {
          return RetCode.OUT_OF_RANGE_START_INDEX ;
       }
@@ -253,12 +255,14 @@
             isUptrend = 1;
          }
          if( (isUptrend) != 0 ) {
-            outSupertrend[outIdx] = finalLower;
-            outTrend[outIdx] = 1;
+            emittedSupertrend = finalLower;
+            emittedTrend = 1;
          } else {
-            outSupertrend[outIdx] = finalUpper;
-            outTrend[outIdx] = -1;
+            emittedSupertrend = finalUpper;
+            emittedTrend = -1;
          }
+         outSupertrend[outIdx] = emittedSupertrend;
+         outTrend[outIdx] = emittedTrend;
          prevClose = closeToday;
          outIdx += 1;
          today += 1;
@@ -284,6 +288,7 @@
       int outIdx = 0;
       int lookbackTotal = 0;
       int isUptrend = 0;
+      int emittedTrend = 0;
       double prevATR = 0;
       double periodTotal = 0;
       double wAlpha = 0;
@@ -302,6 +307,7 @@
       double finalLower = 0;
       double closeToday = 0;
       double prevClose = 0;
+      double emittedSupertrend = 0;
       if( (startIdx < 0) || (startIdx > INDEX_MAX) ) {
          return RetCode.OUT_OF_RANGE_START_INDEX ;
       }
@@ -410,12 +416,14 @@
             isUptrend = 1;
          }
          if( (isUptrend) != 0 ) {
-            outSupertrend[outIdx] = finalLower;
-            outTrend[outIdx] = 1;
+            emittedSupertrend = finalLower;
+            emittedTrend = 1;
          } else {
-            outSupertrend[outIdx] = finalUpper;
-            outTrend[outIdx] = -1;
+            emittedSupertrend = finalUpper;
+            emittedTrend = -1;
          }
+         outSupertrend[outIdx] = emittedSupertrend;
+         outTrend[outIdx] = emittedTrend;
          prevClose = closeToday;
          outIdx += 1;
          today += 1;
@@ -731,6 +739,7 @@
          if( !Double.isFinite(inHigh) || !Double.isFinite(inLow) || !Double.isFinite(inClose) )
             throw nonFiniteBar("SUPERTREND peek", !Double.isFinite(inHigh) ? "inHigh" : !Double.isFinite(inLow) ? "inLow" : "inClose");
          SupertrendStream sp = this;
+         int emittedTrend = 0;
          double val2 = 0.0;
          double val3 = 0.0;
          double greatest = 0.0;
@@ -742,6 +751,7 @@
          double basicUpper = 0.0;
          double basicLower = 0.0;
          double closeToday = 0.0;
+         double emittedSupertrend = 0.0;
          double cur_outSupertrend = 0.0;
          int cur_outTrend = 0;
          double finalLower = sp.finalLower;
@@ -796,12 +806,14 @@
             isUptrend = 1;
          }
          if( (isUptrend) != 0 ) {
-            cur_outSupertrend = finalLower;
-            cur_outTrend = 1;
+            emittedSupertrend = finalLower;
+            emittedTrend = 1;
          } else {
-            cur_outSupertrend = finalUpper;
-            cur_outTrend = -1;
+            emittedSupertrend = finalUpper;
+            emittedTrend = -1;
          }
+         cur_outSupertrend = emittedSupertrend;
+         cur_outTrend = emittedTrend;
          out.supertrend = cur_outSupertrend;
          out.trend = cur_outTrend;
       }
@@ -858,6 +870,7 @@
    }
    private void supertrendStepImpl( SupertrendStream sp, double inHigh, double inLow, double inClose )
    {
+      int emittedTrend = 0;
       double val2 = 0.0;
       double val3 = 0.0;
       double greatest = 0.0;
@@ -869,6 +882,7 @@
       double basicUpper = 0.0;
       double basicLower = 0.0;
       double closeToday = 0.0;
+      double emittedSupertrend = 0.0;
       tempLT = inLow;
       tempHT = inHigh;
       tempCY = sp.lag1_inClose;
@@ -917,12 +931,14 @@
          sp.isUptrend = 1;
       }
       if( (sp.isUptrend) != 0 ) {
-         sp.cur_outSupertrend = sp.finalLower;
-         sp.cur_outTrend = 1;
+         emittedSupertrend = sp.finalLower;
+         emittedTrend = 1;
       } else {
-         sp.cur_outSupertrend = sp.finalUpper;
-         sp.cur_outTrend = -1;
+         emittedSupertrend = sp.finalUpper;
+         emittedTrend = -1;
       }
+      sp.cur_outSupertrend = emittedSupertrend;
+      sp.cur_outTrend = emittedTrend;
       sp.prevClose = closeToday;
       sp.lag1_inClose = inClose;
    }
@@ -933,6 +949,7 @@
       int outIdx = 0;
       int lookbackTotal = 0;
       int isUptrend = 0;
+      int emittedTrend = 0;
       double prevATR = 0;
       double periodTotal = 0;
       double wAlpha = 0;
@@ -951,6 +968,7 @@
       double finalLower = 0;
       double closeToday = 0;
       double prevClose = 0;
+      double emittedSupertrend = 0;
       int historyLen = inHigh.length;
       int endIdx = historyLen - 1;
       if( historyLen < 1 ) {
@@ -1108,12 +1126,14 @@
             isUptrend = 1;
          }
          if( (isUptrend) != 0 ) {
-            outSupertrend[outIdx * outStride] = finalLower;
-            outTrend[outIdx * outStride] = 1;
+            emittedSupertrend = finalLower;
+            emittedTrend = 1;
          } else {
-            outSupertrend[outIdx * outStride] = finalUpper;
-            outTrend[outIdx * outStride] = -1;
+            emittedSupertrend = finalUpper;
+            emittedTrend = -1;
          }
+         outSupertrend[outIdx * outStride] = emittedSupertrend;
+         outTrend[outIdx * outStride] = emittedTrend;
          prevClose = closeToday;
          outIdx += 1;
          today += 1;

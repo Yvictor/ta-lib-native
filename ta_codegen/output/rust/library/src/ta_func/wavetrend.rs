@@ -415,33 +415,41 @@ impl Core {
         // into their recursions. So nothing here branches on a counter, and the
         // stores always run -- which is what keeps the managed backends' peek
         // frames from carrying a seeded output local.
-        while today <= endIdx {
-            ap = (inHigh[today] + inLow[today] + inClose[today]) / 3.0;
-            esa = (beta1 as f64).mul_add(esa, k1 * ap);
-            num = ap - esa;
-            if ap == prevAp && esa == prevEsa {
-                num = 0.0;
+        if today <= endIdx {
+            let _wn: usize = endIdx - today + 1;
+            let _w0 = &inClose[today..][.._wn];
+            let _w1 = &inHigh[today..][.._wn];
+            let _w2 = &inLow[today..][.._wn];
+            let _w3 = &mut outWT1[outIdx..][.._wn];
+            let _w4 = &mut outWT2[outIdx..][.._wn];
+            for _wk in 0.._wn {
+                ap = (_w1[_wk] + _w2[_wk] + _w0[_wk]) / 3.0;
+                esa = (beta1 as f64).mul_add(esa, k1 * ap);
+                num = ap - esa;
+                if ap == prevAp && esa == prevEsa {
+                    num = 0.0;
+                }
+                dev = (num).abs();
+                d = (beta1 as f64).mul_add(d, k1 * dev);
+                scaledDev = 0.015 * d;
+                if scaledDev > 0.0 {
+                    ci = num / scaledDev;
+                } else {
+                    ci = 0.0;
+                }
+                wt1 = (beta2 as f64).mul_add(wt1, k2 * ci);
+                wtBuffer[wtBuffer_Idx] = wt1;
+                sumSignal = sumSignal + wt1;
+                _w3[_wk] = wt1;
+                _w4[_wk] = sumSignal / (optInSignalPeriod as f64);
+                outIdx = outIdx + 1;
+                wtBuffer_Idx += 1;
+                if wtBuffer_Idx >= wtBuffer.len() { wtBuffer_Idx = 0; }
+                sumSignal = sumSignal - wtBuffer[wtBuffer_Idx];
+                prevAp = ap;
+                prevEsa = esa;
+                today = today + 1;
             }
-            dev = (num).abs();
-            d = (beta1 as f64).mul_add(d, k1 * dev);
-            scaledDev = 0.015 * d;
-            if scaledDev > 0.0 {
-                ci = num / scaledDev;
-            } else {
-                ci = 0.0;
-            }
-            wt1 = (beta2 as f64).mul_add(wt1, k2 * ci);
-            wtBuffer[wtBuffer_Idx] = wt1;
-            sumSignal = sumSignal + wt1;
-            outWT1[outIdx] = wt1;
-            outWT2[outIdx] = sumSignal / (optInSignalPeriod as f64);
-            outIdx = outIdx + 1;
-            wtBuffer_Idx += 1;
-            if wtBuffer_Idx >= wtBuffer.len() { wtBuffer_Idx = 0; }
-            sumSignal = sumSignal - wtBuffer[wtBuffer_Idx];
-            prevAp = ap;
-            prevEsa = esa;
-            today = today + 1;
         }
         (*outNBElement) = outIdx;
         (*outBegIdx) = startIdx;

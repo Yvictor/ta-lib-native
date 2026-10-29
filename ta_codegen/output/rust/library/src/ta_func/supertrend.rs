@@ -209,6 +209,7 @@ impl Core {
         let mut outIdx: usize = 0_usize;
         let mut lookbackTotal: usize = 0_usize;
         let mut isUptrend: usize = 0_usize;
+        let mut emittedTrend: i32 = 0_i32;
         let mut prevATR: f64 = 0.0_f64;
         let mut periodTotal: f64 = 0.0_f64;
         let mut wAlpha: f64 = 0.0_f64;
@@ -227,6 +228,7 @@ impl Core {
         let mut finalLower: f64 = 0.0_f64;
         let mut closeToday: f64 = 0.0_f64;
         let mut prevClose: f64 = 0.0_f64;
+        let mut emittedSupertrend: f64 = 0.0_f64;
         (*outBegIdx) = 0;
         (*outNBElement) = 0;
         lookbackTotal = self.supertrend_lookback(optInTimePeriod, optInMultiplier).unwrap_or(usize::MAX);
@@ -317,58 +319,68 @@ impl Core {
         outTrend[0] = 1;
         outIdx = 1;
         today = startIdx + 1;
-        while today <= endIdx {
-            tempLT = inLow[today];
-            tempHT = inHigh[today];
-            tempCY = inClose[today - 1];
-            greatest = tempHT - tempLT;
-            // val1
-            val2 = (tempCY - tempHT).abs();
-            greatest = c_max(val2, greatest);
-            val3 = (tempCY - tempLT).abs();
-            greatest = c_max(val3, greatest);
-            prevATR = (wBeta as f64).mul_add(prevATR, wAlpha * greatest);
-            medianPrice = (tempHT + tempLT) / 2.0;
-            band = ((optInMultiplier) as f64) * prevATR;
-            basicUpper = medianPrice + band;
-            basicLower = medianPrice - band;
-            // Each band ratchets toward price and is released only by a close on its
-            // far side. Nothing keeps the two ordered -- each is released by its own
-            // condition, so the lower one can end up above the upper one -- and where
-            // that happens a flip puts the emitted band on the far side of the close.
-            // The line is therefore NOT monotone within a trend, and the flag does not
-            // always say which side of the line price is on; both read as invariants
-            // and neither is one.
-            if basicUpper < finalUpper || prevClose > finalUpper {
-                finalUpper = basicUpper;
-            }
-            if basicLower > finalLower || prevClose < finalLower {
-                finalLower = basicLower;
-            }
-            closeToday = inClose[today];
-            // The trend is carried in its own variable rather than recovered by
-            // comparing the previous output against the previous bands. The two
-            // carried bands do coincide on some bars -- always on a bar with no true
-            // range, and on some of them at a multiplier of zero -- and there that
-            // comparison cannot tell them apart, so it would silently lose the
-            // hysteresis on exactly the flat input a corpus of real prices lacks.
-            if isUptrend != 0 {
-                if closeToday < finalLower {
-                    isUptrend = 0;
+        if today <= endIdx {
+            let _wn: usize = endIdx - today + 1;
+            let _w0 = &inClose[today - 1..][.._wn + 1];
+            let _w1 = &inHigh[today - 1 + 1..][.._wn];
+            let _w2 = &inLow[today - 1 + 1..][.._wn];
+            let _w3 = &mut outSupertrend[outIdx..][.._wn];
+            let _w4 = &mut outTrend[outIdx..][.._wn];
+            for _wk in 0.._wn {
+                tempLT = _w2[_wk];
+                tempHT = _w1[_wk];
+                tempCY = _w0[_wk];
+                greatest = tempHT - tempLT;
+                // val1
+                val2 = (tempCY - tempHT).abs();
+                greatest = c_max(val2, greatest);
+                val3 = (tempCY - tempLT).abs();
+                greatest = c_max(val3, greatest);
+                prevATR = (wBeta as f64).mul_add(prevATR, wAlpha * greatest);
+                medianPrice = (tempHT + tempLT) / 2.0;
+                band = ((optInMultiplier) as f64) * prevATR;
+                basicUpper = medianPrice + band;
+                basicLower = medianPrice - band;
+                // Each band ratchets toward price and is released only by a close on its
+                // far side. Nothing keeps the two ordered -- each is released by its own
+                // condition, so the lower one can end up above the upper one -- and where
+                // that happens a flip puts the emitted band on the far side of the close.
+                // The line is therefore NOT monotone within a trend, and the flag does not
+                // always say which side of the line price is on; both read as invariants
+                // and neither is one.
+                if basicUpper < finalUpper || prevClose > finalUpper {
+                    finalUpper = basicUpper;
                 }
-            } else if closeToday > finalUpper {
-                isUptrend = 1;
+                if basicLower > finalLower || prevClose < finalLower {
+                    finalLower = basicLower;
+                }
+                closeToday = _w0[_wk + 1];
+                // The trend is carried in its own variable rather than recovered by
+                // comparing the previous output against the previous bands. The two
+                // carried bands do coincide on some bars -- always on a bar with no true
+                // range, and on some of them at a multiplier of zero -- and there that
+                // comparison cannot tell them apart, so it would silently lose the
+                // hysteresis on exactly the flat input a corpus of real prices lacks.
+                if isUptrend != 0 {
+                    if closeToday < finalLower {
+                        isUptrend = 0;
+                    }
+                } else if closeToday > finalUpper {
+                    isUptrend = 1;
+                }
+                if isUptrend != 0 {
+                    emittedSupertrend = finalLower;
+                    emittedTrend = 1;
+                } else {
+                    emittedSupertrend = finalUpper;
+                    emittedTrend = -1;
+                }
+                _w3[_wk] = emittedSupertrend;
+                _w4[_wk] = emittedTrend;
+                prevClose = closeToday;
+                outIdx += 1;
+                today += 1;
             }
-            if isUptrend != 0 {
-                outSupertrend[outIdx] = finalLower;
-                outTrend[outIdx] = 1;
-            } else {
-                outSupertrend[outIdx] = finalUpper;
-                outTrend[outIdx] = -1;
-            }
-            prevClose = closeToday;
-            outIdx += 1;
-            today += 1;
         }
         (*outBegIdx) = startIdx;
         (*outNBElement) = outIdx;
@@ -558,6 +570,7 @@ struct SupertrendStreamState {
 #[allow(unused_parens)]
 impl Core {
     fn supertrend_step_impl(sp: &mut SupertrendStreamState, inHigh: f64, inLow: f64, inClose: f64, outSupertrend: &mut f64, outTrend: &mut i32) {
+        let mut emittedTrend: i32 = 0_i32;
         let mut val2: f64 = 0.0_f64;
         let mut val3: f64 = 0.0_f64;
         let mut greatest: f64 = 0.0_f64;
@@ -569,6 +582,7 @@ impl Core {
         let mut basicUpper: f64 = 0.0_f64;
         let mut basicLower: f64 = 0.0_f64;
         let mut closeToday: f64 = 0.0_f64;
+        let mut emittedSupertrend: f64 = 0.0_f64;
         tempLT = inLow;
         tempHT = inHigh;
         tempCY = sp.lag1_inClose;
@@ -611,12 +625,14 @@ impl Core {
             sp.isUptrend = 1;
         }
         if sp.isUptrend != 0 {
-            (*outSupertrend) = sp.finalLower;
-            (*outTrend) = 1;
+            emittedSupertrend = sp.finalLower;
+            emittedTrend = 1;
         } else {
-            (*outSupertrend) = sp.finalUpper;
-            (*outTrend) = -1;
+            emittedSupertrend = sp.finalUpper;
+            emittedTrend = -1;
         }
+        (*outSupertrend) = emittedSupertrend;
+        (*outTrend) = emittedTrend;
         sp.prevClose = closeToday;
         sp.cur_outSupertrend = (*outSupertrend);
         sp.cur_outTrend = (*outTrend);
@@ -680,6 +696,7 @@ impl Core {
         let mut outIdx: usize = 0_usize;
         let mut lookbackTotal: usize = 0_usize;
         let mut isUptrend: usize = 0_usize;
+        let mut emittedTrend: i32 = 0_i32;
         let mut prevATR: f64 = 0.0_f64;
         let mut periodTotal: f64 = 0.0_f64;
         let mut wAlpha: f64 = 0.0_f64;
@@ -698,6 +715,7 @@ impl Core {
         let mut finalLower: f64 = 0.0_f64;
         let mut closeToday: f64 = 0.0_f64;
         let mut prevClose: f64 = 0.0_f64;
+        let mut emittedSupertrend: f64 = 0.0_f64;
         (*outBegIdx) = 0;
         (*outNBElement) = 0;
         lookbackTotal = self.supertrend_lookback(optInTimePeriod, optInMultiplier)?;
@@ -812,12 +830,14 @@ impl Core {
                 isUptrend = 1;
             }
             if isUptrend != 0 {
-                outSupertrend[(outIdx * outStride) as usize] = finalLower;
-                outTrend[(outIdx * outStride) as usize] = 1;
+                emittedSupertrend = finalLower;
+                emittedTrend = 1;
             } else {
-                outSupertrend[(outIdx * outStride) as usize] = finalUpper;
-                outTrend[(outIdx * outStride) as usize] = -1;
+                emittedSupertrend = finalUpper;
+                emittedTrend = -1;
             }
+            outSupertrend[(outIdx * outStride) as usize] = emittedSupertrend;
+            outTrend[(outIdx * outStride) as usize] = emittedTrend;
             prevClose = closeToday;
             outIdx += 1;
             today += 1;
@@ -1026,6 +1046,7 @@ impl SupertrendStream {
             let sp = &self.state;
             let outSupertrend = &mut outSupertrend;
             let outTrend = &mut outTrend;
+            let mut emittedTrend: i32 = 0_i32;
             let mut val2: f64 = 0.0_f64;
             let mut val3: f64 = 0.0_f64;
             let mut greatest: f64 = 0.0_f64;
@@ -1037,6 +1058,7 @@ impl SupertrendStream {
             let mut basicUpper: f64 = 0.0_f64;
             let mut basicLower: f64 = 0.0_f64;
             let mut closeToday: f64 = 0.0_f64;
+            let mut emittedSupertrend: f64 = 0.0_f64;
             let mut finalLower = sp.finalLower;
             let mut finalUpper = sp.finalUpper;
             let mut isUptrend = sp.isUptrend;
@@ -1083,12 +1105,14 @@ impl SupertrendStream {
                 isUptrend = 1;
             }
             if isUptrend != 0 {
-                (*outSupertrend) = finalLower;
-                (*outTrend) = 1;
+                emittedSupertrend = finalLower;
+                emittedTrend = 1;
             } else {
-                (*outSupertrend) = finalUpper;
-                (*outTrend) = -1;
+                emittedSupertrend = finalUpper;
+                emittedTrend = -1;
             }
+            (*outSupertrend) = emittedSupertrend;
+            (*outTrend) = emittedTrend;
         }
         Ok((outSupertrend, outTrend))
     }

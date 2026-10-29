@@ -35,13 +35,13 @@ TA_RetCode supertrend(int startIdx, int endIdx,
    int outTrend[])
 {
    int i, today, outIdx, lookbackTotal;
-   int isUptrend;
+   int isUptrend, emittedTrend;
 
    double prevATR, periodTotal, wAlpha, wBeta;
    double val2, val3, greatest;
    double tempCY, tempLT, tempHT;
    double medianPrice, band, basicUpper, basicLower;
-   double finalUpper, finalLower, closeToday, prevClose;
+   double finalUpper, finalLower, closeToday, prevClose, emittedSupertrend;
 
    *outBegIdx = 0;
    *outNBElement = 0;
@@ -194,14 +194,16 @@ TA_RetCode supertrend(int startIdx, int endIdx,
 
       if( isUptrend )
       {
-         outSupertrend[outIdx] = finalLower;
-         outTrend[outIdx] = 1;
+         emittedSupertrend = finalLower;
+         emittedTrend = 1;
       }
       else
       {
-         outSupertrend[outIdx] = finalUpper;
-         outTrend[outIdx] = -1;
+         emittedSupertrend = finalUpper;
+         emittedTrend = -1;
       }
+      outSupertrend[outIdx] = emittedSupertrend;
+      outTrend[outIdx] = emittedTrend;
 
       prevClose = closeToday;
       outIdx++;
