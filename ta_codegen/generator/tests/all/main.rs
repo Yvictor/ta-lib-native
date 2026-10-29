@@ -23,6 +23,7 @@ mod internal_error_id_suite;
 mod java_render_statement_suite;
 mod java_stream_suite;
 mod managed_stream_suite;
+mod mavp_guard_suite;
 mod open_core_suite;
 mod open_validation_suite;
 mod out_range_advance_suite;

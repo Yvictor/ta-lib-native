@@ -254,18 +254,9 @@ impl Core {
         // C's aliasing arms and any guard or copy-back they need are
         // unreachable here: `&[T]` and `&mut [T]` parameters can never
         // overlap, and neither can two `&mut [T]`. See issue #146.
-        // Read the caller array of period, truncate to min/max, and track the
-        // range of periods actually used so all later work is sized by the data,
-        // not by optInMaxPeriod. The floor at 1 (and on minUsed's start value)
-        // keeps a period below 1 from indexing the occurrence tables out of range.
-        // mavp.yaml's period range starts at 1, so it is inert through the API;
-        // it is kept because this file is the source of truth for four
-        // backends and it makes the shared source safe by construction rather than
-        // by trusting each backend's prologue to be identical.
+        // Every emitted batch entry validates 1 <= min <= max <= 10000.
+        // Real-domain clamping therefore makes each narrowed period at least 1.
         minUsed = (optInMaxPeriod) as usize;
-        if minUsed < 1 {
-            minUsed = 1;
-        }
         maxUsed = 1;
         // Both bounds widened once, outside the loop. In the C backend, left to the
         // compiler, only the first of the two is hoisted.
@@ -289,9 +280,6 @@ impl Core {
                 tempInt = optInMaxPeriod;
             } else {
                 tempInt = (tempPeriod) as i32;
-            }
-            if tempInt < 1 {
-                tempInt = 1;
             }
             localPeriodArray[i] = (tempInt) as i32;
             if tempInt < ((minUsed) as i32) {

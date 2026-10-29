@@ -82,6 +82,7 @@ public class BatchApiTest {
 
     private static int failures = 0;
     private static int checks = 0;
+    private static int mavpRejected = 0, mavpDefaulted = 0;
 
     /* The streaming-opener cases below are counted apart from the batch ones:
      * sharing a counter would let a deleted streaming case hide behind a batch
@@ -1222,7 +1223,73 @@ public class BatchApiTest {
             "a null enum at the opener is named", "MA openAndFill", "optInMAType");
     }
 
+
+    private static void mavpValidatedBounds() {
+        double[] price = new double[252], periods = new double[252];
+        float[] priceS = new float[252], periodsS = new float[252];
+        double[] raw = {Double.NaN, Double.NEGATIVE_INFINITY, 1.0, 3.75, 9.0,
+                        Double.POSITIVE_INFINITY};
+        Arrays.fill(price, 100.0);
+        Arrays.fill(priceS, 100.0f);
+        for (int i = 0; i < price.length; i++) {
+            periods[i] = raw[i % raw.length];
+            periodsS[i] = (float) periods[i];
+        }
+        int[][] bad = {
+            {0, 30}, {-1, 30}, {10001, 10001}, {Integer.MAX_VALUE, Integer.MAX_VALUE},
+            {2, 0}, {2, -1}, {2, 10001}, {2, Integer.MAX_VALUE}, {30, 2},
+            {Integer.MIN_VALUE, 1}, {31, Integer.MIN_VALUE}
+        };
+        int[][] defaults = {
+            {Integer.MIN_VALUE, Integer.MIN_VALUE, 2, 30},
+            {Integer.MIN_VALUE, 30, 2, 30}, {1, Integer.MIN_VALUE, 1, 30}
+        };
+        for (MAType kind : MAType.values()) {
+            for (boolean single : new boolean[]{false, true}) {
+                for (int[] band : bad) {
+                    String label = "MAVP " + kind + "/float=" + single + "/" + band[0] + "/" + band[1];
+                    double[] out = new double[280];
+                    Arrays.fill(out, 123456.75);
+                    check(Core.DEFAULT.mavpLookback(band[0], band[1], kind) == -1,
+                          label + " invalid lookback");
+                    check(codeOf(() -> {
+                        if (single) Core.DEFAULT.mavp(0, 251, priceS, periodsS, band[0], band[1], kind, out);
+                        else Core.DEFAULT.mavp(0, 251, price, periods, band[0], band[1], kind, out);
+                    }) == RetCode.BAD_PARAM, label + " rejected");
+                    check(Arrays.stream(out).allMatch(v -> v == 123456.75),
+                          label + " rejection writes nothing");
+                    mavpRejected++;
+                }
+                for (int[] band : defaults) {
+                    String label = "MAVP " + kind + "/float=" + single + "/" + band[0] + "/" + band[1];
+                    double[] out = new double[280], expected = new double[280];
+                    Arrays.fill(out, 123456.75);
+                    Arrays.fill(expected, 123456.75);
+                    OutRange a = single
+                        ? Core.DEFAULT.mavp(0, 251, priceS, periodsS, band[0], band[1], kind, out)
+                        : Core.DEFAULT.mavp(0, 251, price, periods, band[0], band[1], kind, out);
+                    OutRange b = single
+                        ? Core.DEFAULT.mavp(0, 251, priceS, periodsS, band[2], band[3], kind, expected)
+                        : Core.DEFAULT.mavp(0, 251, price, periods, band[2], band[3], kind, expected);
+                    check(a.count() > 0 && a.count() == b.count() && a.begIdx() == b.begIdx(),
+                          label + " defaults preserve range");
+                    boolean same = true;
+                    for (int i = 0; i < out.length; i++) {
+                        same &= Double.doubleToRawLongBits(out[i]) == Double.doubleToRawLongBits(expected[i]);
+                    }
+                    check(same, label + " defaults preserve bits");
+                    boolean tail = true;
+                    for (int i = a.count(); i < out.length; i++) tail &= out[i] == 123456.75;
+                    check(tail, label + " defaults preserve padding");
+                    mavpDefaulted++;
+                }
+            }
+        }
+    }
+
     public static void main(String[] args) {
+        mavpValidatedBounds();
+        check(mavpRejected >= 352 && mavpDefaulted >= 96, "MAVP guard matrix reach");
         maxWithKnownOutputs();
         begIdxEqualsLookback();
         cmoLeavesTheTailUntouched();

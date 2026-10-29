@@ -746,7 +746,8 @@ fn rust_negative_capable_cast_gets_signed_local() {
         "tempPeriod = inPeriods[startIdx + i];",
         "if !(tempPeriod >= minPeriodReal) {",  // NaN-catching spelling
         "tempInt = (tempPeriod) as i32;",       // narrowed only once in range
-        "if tempInt < 1 {",                     // clamps stay signed compares
+        "if tempInt < ((minUsed) as i32) {",     // extrema compare stays signed
+        "let mut minUsed: usize",               // bounds remain index-domain
     ] {
         assert!(out.rust.contains(needle), "MAVP Rust missing `{needle}`:\n{}", out.rust);
     }

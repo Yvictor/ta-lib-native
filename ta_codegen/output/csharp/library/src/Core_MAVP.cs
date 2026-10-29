@@ -259,19 +259,10 @@ public partial class Core
       } else {
          localFinalArray = outReal;
       }
-      /* Read the caller array of period, truncate to min/max, and track the
-       * range of periods actually used so all later work is sized by the data,
-       * not by optInMaxPeriod. The floor at 1 (and on minUsed's start value)
-       * keeps a period below 1 from indexing the occurrence tables out of range.
-       * mavp.yaml's period range starts at 1, so it is inert through the API;
-       * it is kept because this file is the source of truth for four
-       * backends and it makes the shared source safe by construction rather than
-       * by trusting each backend's prologue to be identical.
+      /* Every emitted batch entry validates 1 <= min <= max <= 10000.
+       * Real-domain clamping therefore makes each narrowed period at least 1.
        */
       minUsed = optInMaxPeriod;
-      if( minUsed < 1 ) {
-         minUsed = 1;
-      }
       maxUsed = 1;
       /* Both bounds widened once, outside the loop. In the C backend, left to the
        * compiler, only the first of the two is hoisted.
@@ -295,9 +286,6 @@ public partial class Core
             tempInt = optInMaxPeriod;
          } else {
             tempInt = (int)tempPeriod;
-         }
-         if( tempInt < 1 ) {
-            tempInt = 1;
          }
          localPeriodArray[i] = tempInt;
          if( tempInt < minUsed ) {
@@ -562,9 +550,6 @@ public partial class Core
       finalIsAllocated = 0;
       localFinalArray = outReal;
       minUsed = optInMaxPeriod;
-      if( minUsed < 1 ) {
-         minUsed = 1;
-      }
       maxUsed = 1;
       minPeriodReal = optInMinPeriod;
       maxPeriodReal = optInMaxPeriod;
@@ -576,9 +561,6 @@ public partial class Core
             tempInt = optInMaxPeriod;
          } else {
             tempInt = (int)tempPeriod;
-         }
-         if( tempInt < 1 ) {
-            tempInt = 1;
          }
          localPeriodArray[i] = tempInt;
          if( tempInt < minUsed ) {

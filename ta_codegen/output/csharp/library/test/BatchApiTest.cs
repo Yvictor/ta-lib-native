@@ -79,6 +79,7 @@ public static class BatchApiTest
 {
     private static int _failures;
     private static int _checks;
+    private static int _mavpRejected, _mavpDefaulted;
 
     private static void Check(bool condition, string what)
     {
@@ -1180,8 +1181,74 @@ public static class BatchApiTest
         Check(h.Call(0, 199).Count == 191, "the same call with a sized output succeeds");
     }
 
+
+    private static void MavpValidatedBounds()
+    {
+        var core = Core.Default;
+        double[] price = new double[252], periods = new double[252];
+        float[] priceS = new float[252], periodsS = new float[252];
+        double[] raw = { double.NaN, double.NegativeInfinity, 1.0, 3.75, 9.0, double.PositiveInfinity };
+        Array.Fill(price, 100.0);
+        Array.Fill(priceS, 100.0f);
+        for (int i = 0; i < price.Length; i++)
+        {
+            periods[i] = raw[i % raw.Length];
+            periodsS[i] = (float)periods[i];
+        }
+        int[][] bad = {
+            new[] { 0, 30 }, new[] { -1, 30 }, new[] { 10001, 10001 }, new[] { int.MaxValue, int.MaxValue },
+            new[] { 2, 0 }, new[] { 2, -1 }, new[] { 2, 10001 }, new[] { 2, int.MaxValue }, new[] { 30, 2 },
+            new[] { int.MinValue, 1 }, new[] { 31, int.MinValue }
+        };
+        int[][] defaults = {
+            new[] { int.MinValue, int.MinValue, 2, 30 },
+            new[] { int.MinValue, 30, 2, 30 }, new[] { 1, int.MinValue, 1, 30 }
+        };
+        foreach (var kind in Enum.GetValues<MAType>())
+        foreach (bool single in new[] { false, true })
+        {
+            foreach (var band in bad)
+            {
+                string label = $"MAVP {kind}/float={single}/{band[0]}/{band[1]}";
+                double[] output = new double[280];
+                Array.Fill(output, 123456.75);
+                Check(core.MavpLookback(band[0], band[1], kind) == -1, label + " invalid lookback");
+                CarriesBadParam(() => {
+                    if (single) core.Mavp(0, 251, priceS, periodsS, band[0], band[1], kind, output);
+                    else core.Mavp(0, 251, price, periods, band[0], band[1], kind, output);
+                }, label + " rejected");
+                Check(Array.TrueForAll(output, v => v == 123456.75), label + " rejection writes nothing");
+                _mavpRejected++;
+            }
+            foreach (var band in defaults)
+            {
+                string label = $"MAVP {kind}/float={single}/{band[0]}/{band[1]}";
+                double[] output = new double[280], expected = new double[280];
+                Array.Fill(output, 123456.75);
+                Array.Fill(expected, 123456.75);
+                var a = single
+                    ? core.Mavp(0, 251, priceS, periodsS, band[0], band[1], kind, output)
+                    : core.Mavp(0, 251, price, periods, band[0], band[1], kind, output);
+                var b = single
+                    ? core.Mavp(0, 251, priceS, periodsS, band[2], band[3], kind, expected)
+                    : core.Mavp(0, 251, price, periods, band[2], band[3], kind, expected);
+                Check(a.Count > 0 && a.Count == b.Count && a.BegIdx == b.BegIdx, label + " defaults preserve range");
+                bool same = true;
+                for (int i = 0; i < output.Length; i++)
+                    same &= BitConverter.DoubleToInt64Bits(output[i]) == BitConverter.DoubleToInt64Bits(expected[i]);
+                Check(same, label + " defaults preserve bits");
+                bool tail = true;
+                for (int i = a.Count; i < output.Length; i++) tail &= output[i] == 123456.75;
+                Check(tail, label + " defaults preserve padding");
+                _mavpDefaulted++;
+            }
+        }
+    }
+
     public static int Run()
     {
+        MavpValidatedBounds();
+        Check(_mavpRejected >= 352 && _mavpDefaulted >= 96, "MAVP guard matrix reach");
         MaxWithKnownOutputs();
         BegIdxEqualsLookback();
         CmoLeavesTheTailUntouched();

@@ -95,6 +95,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <limits.h>
 
 #include "ta_test_priv.h"
 #include "ta_test_func.h"
@@ -142,6 +143,8 @@ static float   mvPeriodsS[MV_BUF_SIZE];
 
 /**** Local functions declarations.    ****/
 static ErrorNumber mvLoadTypes( void );
+static ErrorNumber mvValidatedBounds( void );
+static int mvBoundRejected, mvBoundDefaulted;
 static ErrorNumber mvSparseSmaEdges( void );
 static ErrorNumber mvWidestExpressibleBand( void );
 static ErrorNumber mvStreamBank( void );
@@ -188,6 +191,11 @@ ErrorNumber test_func_mavp( TA_History *history )
 
    /* These tests assume pristine global settings. */
    TA_SetUnstablePeriod( TA_FUNC_UNST_ALL, 0 );
+   errNb = mvValidatedBounds();
+   if( errNb != TA_TEST_PASS ) return errNb;
+   if( mvBoundRejected < 352 || mvBoundDefaulted < 96 )
+      return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+
 
    /* Shape: one distinct period, straight from the data. */
    for( i = 0; i < MV_DATA_SIZE; i++ )
@@ -391,6 +399,63 @@ ErrorNumber test_func_mavp( TA_History *history )
 /* Fill mvTypes from ta_abstract's generated MAType list, found by name on
  * MAVP's own optInMAType parameter (not by a hardcoded parameter index).
  */
+
+static ErrorNumber mvValidatedBounds( void )
+{
+   static const int bad[][2] = {
+      {0,30}, {-1,30}, {10001,10001}, {INT_MAX,INT_MAX},
+      {2,0}, {2,-1}, {2,10001}, {2,INT_MAX}, {30,2},
+      {TA_INTEGER_DEFAULT,1}, {31,TA_INTEGER_DEFAULT}
+   };
+   static const int defaults[][4] = {
+      {TA_INTEGER_DEFAULT,TA_INTEGER_DEFAULT,2,30},
+      {TA_INTEGER_DEFAULT,30,2,30}, {1,TA_INTEGER_DEFAULT,1,30}
+   };
+   double price[MV_DATA_SIZE], periods[MV_DATA_SIZE];
+   float priceS[MV_DATA_SIZE], periodsS[MV_DATA_SIZE];
+   double out[MV_BUF_SIZE], expected[MV_BUF_SIZE];
+   double raw[6] = { NAN, -INFINITY, 1.0, 3.75, 9.0, INFINITY };
+   int i, t, c, single, beg, count, wantBeg, wantCount;
+   TA_RetCode rc, wantRc;
+   mvBoundRejected = mvBoundDefaulted = 0;
+   for( i=0; i<MV_DATA_SIZE; i++ )
+   {
+      price[i] = 100.0;
+      priceS[i] = 100.0f;
+      periods[i] = raw[i%6];
+      periodsS[i] = (float)raw[i%6];
+   }
+   for( t=0; t<mvNbTypes; t++ )
+   for( single=0; single<2; single++ )
+   {
+      for( c=0; c<(int)(sizeof(bad)/sizeof(bad[0])); c++ )
+      {
+         for( i=0; i<MV_BUF_SIZE; i++ ) out[i] = 123456.75;
+         beg = -777; count = -888;
+         rc = single ? TA_S_MAVP(0,MV_DATA_SIZE-1,priceS,periodsS,bad[c][0],bad[c][1],mvTypes[t],&beg,&count,out+1)
+                     : TA_MAVP(0,MV_DATA_SIZE-1,price,periods,bad[c][0],bad[c][1],mvTypes[t],&beg,&count,out+1);
+         if( TA_MAVP_Lookback(bad[c][0],bad[c][1],mvTypes[t])!=-1 ) return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+         if( rc!=TA_BAD_PARAM || beg!=-777 || count!=-888 ) return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+         for( i=0; i<MV_BUF_SIZE; i++ ) if( out[i]!=123456.75 ) return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+         mvBoundRejected++;
+      }
+      for( c=0; c<(int)(sizeof(defaults)/sizeof(defaults[0])); c++ )
+      {
+         for( i=0; i<MV_BUF_SIZE; i++ ) out[i] = expected[i] = 123456.75;
+         beg = count = wantBeg = wantCount = -1;
+         rc = single ? TA_S_MAVP(0,MV_DATA_SIZE-1,priceS,periodsS,defaults[c][0],defaults[c][1],mvTypes[t],&beg,&count,out+1)
+                     : TA_MAVP(0,MV_DATA_SIZE-1,price,periods,defaults[c][0],defaults[c][1],mvTypes[t],&beg,&count,out+1);
+         wantRc = single ? TA_S_MAVP(0,MV_DATA_SIZE-1,priceS,periodsS,defaults[c][2],defaults[c][3],mvTypes[t],&wantBeg,&wantCount,expected+1)
+                         : TA_MAVP(0,MV_DATA_SIZE-1,price,periods,defaults[c][2],defaults[c][3],mvTypes[t],&wantBeg,&wantCount,expected+1);
+         if( rc!=TA_SUCCESS || wantRc!=TA_SUCCESS || beg!=wantBeg || count!=wantCount || count<=0 ||
+             memcmp(out,expected,sizeof(out))!=0 || out[0]!=123456.75 ) return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+         for( i=count+1; i<MV_BUF_SIZE; i++ ) if( out[i]!=123456.75 ) return TA_REGTEST_OPTIMIZATION_REF_ERROR;
+         mvBoundDefaulted++;
+      }
+   }
+   return TA_TEST_PASS;
+}
+
 static ErrorNumber mvLoadTypes( void )
 {
    const TA_FuncHandle *handle;
