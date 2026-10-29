@@ -101,6 +101,7 @@ TA_LIB_API TA_RetCode TA_SUPERTREND( int    startIdx,
    int outIdx;
    int lookbackTotal;
    int isUptrend;
+   int emittedTrend;
    double prevATR;
    double periodTotal;
    double wAlpha;
@@ -119,6 +120,7 @@ TA_LIB_API TA_RetCode TA_SUPERTREND( int    startIdx,
    double finalLower;
    double closeToday;
    double prevClose;
+   double emittedSupertrend;
 
    if( (startIdx < 0) || (startIdx > TA_INDEX_MAX) )
       return TA_OUT_OF_RANGE_START_INDEX;
@@ -296,13 +298,15 @@ TA_LIB_API TA_RetCode TA_SUPERTREND( int    startIdx,
       }
       if( isUptrend )
       {
-         outSupertrend[outIdx] = finalLower;
-         outTrend[outIdx] = 1;
+         emittedSupertrend = finalLower;
+         emittedTrend = 1;
       } else 
       {
-         outSupertrend[outIdx] = finalUpper;
-         outTrend[outIdx] = -1;
+         emittedSupertrend = finalUpper;
+         emittedTrend = -1;
       }
+      outSupertrend[outIdx] = emittedSupertrend;
+      outTrend[outIdx] = emittedTrend;
       prevClose = closeToday;
       outIdx += 1;
       today += 1;
@@ -330,6 +334,7 @@ TA_RetCode TA_S_SUPERTREND( int    startIdx,
    int outIdx;
    int lookbackTotal;
    int isUptrend;
+   int emittedTrend;
    double prevATR;
    double periodTotal;
    double wAlpha;
@@ -348,6 +353,7 @@ TA_RetCode TA_S_SUPERTREND( int    startIdx,
    double finalLower;
    double closeToday;
    double prevClose;
+   double emittedSupertrend;
 
    if( (startIdx < 0) || (startIdx > TA_INDEX_MAX) )
       return TA_OUT_OF_RANGE_START_INDEX;
@@ -486,13 +492,15 @@ TA_RetCode TA_S_SUPERTREND( int    startIdx,
       }
       if( isUptrend )
       {
-         outSupertrend[outIdx] = finalLower;
-         outTrend[outIdx] = 1;
+         emittedSupertrend = finalLower;
+         emittedTrend = 1;
       } else 
       {
-         outSupertrend[outIdx] = finalUpper;
-         outTrend[outIdx] = -1;
+         emittedSupertrend = finalUpper;
+         emittedTrend = -1;
       }
+      outSupertrend[outIdx] = emittedSupertrend;
+      outTrend[outIdx] = emittedTrend;
       prevClose = closeToday;
       outIdx += 1;
       today += 1;
@@ -528,6 +536,7 @@ struct TA_SUPERTREND_Stream {
 /* Private function, not in public API. */
 static TA_FMA_STEP_INLINE void TA_SUPERTREND_StepImpl( struct TA_SUPERTREND_Stream *sp, double inHigh, double inLow, double inClose, double *outSupertrend, int *outTrend )
 {
+   int emittedTrend;
    double val2;
    double val3;
    double greatest;
@@ -539,6 +548,7 @@ static TA_FMA_STEP_INLINE void TA_SUPERTREND_StepImpl( struct TA_SUPERTREND_Stre
    double basicUpper;
    double basicLower;
    double closeToday;
+   double emittedSupertrend;
 
    tempLT = inLow;
    tempHT = inHigh;
@@ -596,13 +606,15 @@ static TA_FMA_STEP_INLINE void TA_SUPERTREND_StepImpl( struct TA_SUPERTREND_Stre
    }
    if( sp->isUptrend )
    {
-      *outSupertrend= sp->finalLower;
-      *outTrend= 1;
+      emittedSupertrend = sp->finalLower;
+      emittedTrend = 1;
    } else 
    {
-      *outSupertrend= sp->finalUpper;
-      *outTrend= -1;
+      emittedSupertrend = sp->finalUpper;
+      emittedTrend = -1;
    }
+   *outSupertrend= emittedSupertrend;
+   *outTrend= emittedTrend;
    sp->prevClose = closeToday;
    sp->cur_outSupertrend = *outSupertrend;
    sp->cur_outTrend = *outTrend;
@@ -642,6 +654,7 @@ static TA_FMA_STEP_INLINE TA_RetCode TA_SUPERTREND_OpenImpl( struct TA_SUPERTREN
       int outIdx;
       int lookbackTotal;
       int isUptrend = 0;
+      int emittedTrend;
       double prevATR = 0.0;
       double periodTotal;
       double wAlpha = 0.0;
@@ -660,6 +673,7 @@ static TA_FMA_STEP_INLINE TA_RetCode TA_SUPERTREND_OpenImpl( struct TA_SUPERTREN
       double finalLower = 0.0;
       double closeToday;
       double prevClose = 0.0;
+      double emittedSupertrend;
       *outBegIdx= 0;
       *outNBElement= 0;
       lookbackTotal = TA_SUPERTREND_Lookback(optInTimePeriod,optInMultiplier);
@@ -808,13 +822,15 @@ static TA_FMA_STEP_INLINE TA_RetCode TA_SUPERTREND_OpenImpl( struct TA_SUPERTREN
          }
          if( isUptrend )
          {
-            outSupertrend[outIdx * outStride] = finalLower;
-            outTrend[outIdx * outStride] = 1;
+            emittedSupertrend = finalLower;
+            emittedTrend = 1;
          } else 
          {
-            outSupertrend[outIdx * outStride] = finalUpper;
-            outTrend[outIdx * outStride] = -1;
+            emittedSupertrend = finalUpper;
+            emittedTrend = -1;
          }
+         outSupertrend[outIdx * outStride] = emittedSupertrend;
+         outTrend[outIdx * outStride] = emittedTrend;
          prevClose = closeToday;
          outIdx += 1;
          today += 1;
@@ -932,6 +948,7 @@ TA_FMA_MULTIVERSION
 TA_LIB_API TA_RetCode TA_SUPERTREND_Peek( const TA_SUPERTREND_Stream *stream, double inHigh, double inLow, double inClose, double *outSupertrend, int *outTrend )
 {
    const struct TA_SUPERTREND_Stream *sp = stream;
+   int emittedTrend;
    double val2;
    double val3;
    double greatest;
@@ -943,6 +960,7 @@ TA_LIB_API TA_RetCode TA_SUPERTREND_Peek( const TA_SUPERTREND_Stream *stream, do
    double basicUpper;
    double basicLower;
    double closeToday;
+   double emittedSupertrend;
    double finalLower;
    double finalUpper;
    int isUptrend;
@@ -1010,13 +1028,15 @@ TA_LIB_API TA_RetCode TA_SUPERTREND_Peek( const TA_SUPERTREND_Stream *stream, do
    }
    if( isUptrend )
    {
-      *outSupertrend= finalLower;
-      *outTrend= 1;
+      emittedSupertrend = finalLower;
+      emittedTrend = 1;
    } else 
    {
-      *outSupertrend= finalUpper;
-      *outTrend= -1;
+      emittedSupertrend = finalUpper;
+      emittedTrend = -1;
    }
+   *outSupertrend= emittedSupertrend;
+   *outTrend= emittedTrend;
    return TA_SUCCESS;
 }
 

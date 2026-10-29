@@ -209,6 +209,7 @@ impl Core {
         let mut outIdx: usize = 0_usize;
         let mut lookbackTotal: usize = 0_usize;
         let mut isUptrend: usize = 0_usize;
+        let mut emittedTrend: i32 = 0_i32;
         let mut prevATR: f64 = 0.0_f64;
         let mut periodTotal: f64 = 0.0_f64;
         let mut wAlpha: f64 = 0.0_f64;
@@ -227,6 +228,7 @@ impl Core {
         let mut finalLower: f64 = 0.0_f64;
         let mut closeToday: f64 = 0.0_f64;
         let mut prevClose: f64 = 0.0_f64;
+        let mut emittedSupertrend: f64 = 0.0_f64;
         (*outBegIdx) = 0;
         (*outNBElement) = 0;
         lookbackTotal = self.supertrend_lookback(optInTimePeriod, optInMultiplier).unwrap_or(usize::MAX);
@@ -360,12 +362,14 @@ impl Core {
                 isUptrend = 1;
             }
             if isUptrend != 0 {
-                outSupertrend[outIdx] = finalLower;
-                outTrend[outIdx] = 1;
+                emittedSupertrend = finalLower;
+                emittedTrend = 1;
             } else {
-                outSupertrend[outIdx] = finalUpper;
-                outTrend[outIdx] = -1;
+                emittedSupertrend = finalUpper;
+                emittedTrend = -1;
             }
+            outSupertrend[outIdx] = emittedSupertrend;
+            outTrend[outIdx] = emittedTrend;
             prevClose = closeToday;
             outIdx += 1;
             today += 1;
@@ -558,6 +562,7 @@ struct SupertrendStreamState {
 #[allow(unused_parens)]
 impl Core {
     fn supertrend_step_impl(sp: &mut SupertrendStreamState, inHigh: f64, inLow: f64, inClose: f64, outSupertrend: &mut f64, outTrend: &mut i32) {
+        let mut emittedTrend: i32 = 0_i32;
         let mut val2: f64 = 0.0_f64;
         let mut val3: f64 = 0.0_f64;
         let mut greatest: f64 = 0.0_f64;
@@ -569,6 +574,7 @@ impl Core {
         let mut basicUpper: f64 = 0.0_f64;
         let mut basicLower: f64 = 0.0_f64;
         let mut closeToday: f64 = 0.0_f64;
+        let mut emittedSupertrend: f64 = 0.0_f64;
         tempLT = inLow;
         tempHT = inHigh;
         tempCY = sp.lag1_inClose;
@@ -611,12 +617,14 @@ impl Core {
             sp.isUptrend = 1;
         }
         if sp.isUptrend != 0 {
-            (*outSupertrend) = sp.finalLower;
-            (*outTrend) = 1;
+            emittedSupertrend = sp.finalLower;
+            emittedTrend = 1;
         } else {
-            (*outSupertrend) = sp.finalUpper;
-            (*outTrend) = -1;
+            emittedSupertrend = sp.finalUpper;
+            emittedTrend = -1;
         }
+        (*outSupertrend) = emittedSupertrend;
+        (*outTrend) = emittedTrend;
         sp.prevClose = closeToday;
         sp.cur_outSupertrend = (*outSupertrend);
         sp.cur_outTrend = (*outTrend);
@@ -680,6 +688,7 @@ impl Core {
         let mut outIdx: usize = 0_usize;
         let mut lookbackTotal: usize = 0_usize;
         let mut isUptrend: usize = 0_usize;
+        let mut emittedTrend: i32 = 0_i32;
         let mut prevATR: f64 = 0.0_f64;
         let mut periodTotal: f64 = 0.0_f64;
         let mut wAlpha: f64 = 0.0_f64;
@@ -698,6 +707,7 @@ impl Core {
         let mut finalLower: f64 = 0.0_f64;
         let mut closeToday: f64 = 0.0_f64;
         let mut prevClose: f64 = 0.0_f64;
+        let mut emittedSupertrend: f64 = 0.0_f64;
         (*outBegIdx) = 0;
         (*outNBElement) = 0;
         lookbackTotal = self.supertrend_lookback(optInTimePeriod, optInMultiplier)?;
@@ -812,12 +822,14 @@ impl Core {
                 isUptrend = 1;
             }
             if isUptrend != 0 {
-                outSupertrend[(outIdx * outStride) as usize] = finalLower;
-                outTrend[(outIdx * outStride) as usize] = 1;
+                emittedSupertrend = finalLower;
+                emittedTrend = 1;
             } else {
-                outSupertrend[(outIdx * outStride) as usize] = finalUpper;
-                outTrend[(outIdx * outStride) as usize] = -1;
+                emittedSupertrend = finalUpper;
+                emittedTrend = -1;
             }
+            outSupertrend[(outIdx * outStride) as usize] = emittedSupertrend;
+            outTrend[(outIdx * outStride) as usize] = emittedTrend;
             prevClose = closeToday;
             outIdx += 1;
             today += 1;
@@ -1026,6 +1038,7 @@ impl SupertrendStream {
             let sp = &self.state;
             let outSupertrend = &mut outSupertrend;
             let outTrend = &mut outTrend;
+            let mut emittedTrend: i32 = 0_i32;
             let mut val2: f64 = 0.0_f64;
             let mut val3: f64 = 0.0_f64;
             let mut greatest: f64 = 0.0_f64;
@@ -1037,6 +1050,7 @@ impl SupertrendStream {
             let mut basicUpper: f64 = 0.0_f64;
             let mut basicLower: f64 = 0.0_f64;
             let mut closeToday: f64 = 0.0_f64;
+            let mut emittedSupertrend: f64 = 0.0_f64;
             let mut finalLower = sp.finalLower;
             let mut finalUpper = sp.finalUpper;
             let mut isUptrend = sp.isUptrend;
@@ -1083,12 +1097,14 @@ impl SupertrendStream {
                 isUptrend = 1;
             }
             if isUptrend != 0 {
-                (*outSupertrend) = finalLower;
-                (*outTrend) = 1;
+                emittedSupertrend = finalLower;
+                emittedTrend = 1;
             } else {
-                (*outSupertrend) = finalUpper;
-                (*outTrend) = -1;
+                emittedSupertrend = finalUpper;
+                emittedTrend = -1;
             }
+            (*outSupertrend) = emittedSupertrend;
+            (*outTrend) = emittedTrend;
         }
         Ok((outSupertrend, outTrend))
     }
