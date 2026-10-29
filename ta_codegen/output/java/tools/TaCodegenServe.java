@@ -147235,7 +147235,10 @@ class Core {
                 }
              }
           } else {
-             localOutputArray = new double[(int)(outputSize * 1)];
+             /* Private real scratch has no initial-value guarantee. Each MA writes
+              * its complete prefix before the selected outputs are read below.
+              */
+             localOutputArray = new double[(int)(outputSize)];
              sortedIdx = new int[(int)(outputSize * 1)];
              bucketOfs = new int[(int)((maxUsed - minUsed + 2) * 1)];
              /* Counting sort: sortedIdx ends up holding the output indices ordered
@@ -147461,7 +147464,7 @@ class Core {
                 }
              }
           } else {
-             localOutputArray = new double[(int)(outputSize * 1)];
+             localOutputArray = new double[(int)(outputSize)];
              sortedIdx = new int[(int)(outputSize * 1)];
              bucketOfs = new int[(int)((maxUsed - minUsed + 2) * 1)];
              for( curPeriod = minUsed; curPeriod <= maxUsed + 1; curPeriod += 1 ) {
@@ -230486,7 +230489,7 @@ class Core {
 
 public class TaCodegenServe {
     static Core core = new Core();
-    static final String SPLICED_GENCODE_DIGEST = "497169bbdda3baf4";
+    static final String SPLICED_GENCODE_DIGEST = "87cf4246308f9c7e";
     static final int MAX_ARRAY_SIZE = 200000;
     static double[] refOpen = new double[MAX_ARRAY_SIZE];
     static double[] refHigh = new double[MAX_ARRAY_SIZE];

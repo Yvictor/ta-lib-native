@@ -2770,6 +2770,9 @@ fn render_func_call(
             .map(|a| render_expr(a, ctx, registry, helpers))
             .collect();
         format!("{}({})", c_name, rendered.join(","))
+    } else if matches!(StdlibFn::from_name(fname), Some(StdlibFn::RealScratch)) {
+        let count = render_expr(super::builtins::real_scratch_count(args), ctx, registry, helpers);
+        format!("malloc(({count}) * sizeof(double))")
     } else if StdlibFn::from_name(fname).is_some() {
         // C stdlib functions — pass through as-is without TA_ prefix
         let rendered: Vec<String> = args

@@ -390,7 +390,10 @@ TA_LIB_API TA_RetCode TA_MAVP( int    startIdx,
       free(bucketOfs);
    } else 
    {
-      localOutputArray = malloc(outputSize * sizeof(double));
+      /* Private real scratch has no initial-value guarantee. Each MA writes
+       * its complete prefix before the selected outputs are read below.
+       */
+      localOutputArray = malloc((outputSize) * sizeof(double));
       sortedIdx = malloc(outputSize * sizeof(int));
       bucketOfs = malloc((maxUsed - minUsed + 2) * sizeof(int));
       if( localOutputArray == NULL || sortedIdx == NULL || bucketOfs == NULL )
@@ -735,7 +738,7 @@ TA_RetCode TA_S_MAVP( int    startIdx,
       free(bucketOfs);
    } else 
    {
-      localOutputArray = malloc(outputSize * sizeof(double));
+      localOutputArray = malloc((outputSize) * sizeof(double));
       sortedIdx = malloc(outputSize * sizeof(int));
       bucketOfs = malloc((maxUsed - minUsed + 2) * sizeof(int));
       if( localOutputArray == NULL || sortedIdx == NULL || bucketOfs == NULL )

@@ -154,6 +154,9 @@ pub fn strip_unlikely(cond: &Expr) -> (&Expr, bool) {
 pub enum StdlibFn {
     Sizeof,
     Malloc,
+    /// Private f64 scratch, in elements. The caller writes before reading;
+    /// initial contents are unspecified. Backends choose a valid representation.
+    RealScratch,
     Free,
     Memcpy,
     Memmove,
@@ -166,6 +169,7 @@ impl StdlibFn {
         Some(match name {
             "sizeof" => Self::Sizeof,
             "malloc" => Self::Malloc,
+            REAL_SCRATCH_ALLOC => Self::RealScratch,
             "free" => Self::Free,
             "memcpy" => Self::Memcpy,
             "memmove" => Self::Memmove,
@@ -237,5 +241,16 @@ fn fold_level_select(expr: Expr) -> Expr {
         Expr::Cast(ty, inner) => Expr::Cast(ty, fold(inner)),
         Expr::FuncCall(name, args) => Expr::FuncCall(name, args.into_iter().map(fold_level_select).collect()),
         other => other,
+    }
+}
+
+/// Private canonical-source intrinsic; lowered away rather than exported.
+pub const REAL_SCRATCH_ALLOC: &str = "real_scratch_alloc";
+
+/// The bounded intrinsic admits only one scalar element-count name.
+pub fn real_scratch_count(args: &[Expr]) -> &Expr {
+    match args {
+        [count @ Expr::Var(_)] => count,
+        _ => panic!("{REAL_SCRATCH_ALLOC}: requires exactly one bare scalar count"),
     }
 }

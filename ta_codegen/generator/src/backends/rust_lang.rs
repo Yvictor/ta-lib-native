@@ -5516,6 +5516,15 @@ fn render_func_call(
                 // sizeof(TYPE) → 1: normalizes byte counts to element counts for Rust array operations
                 "1".to_string()
             }
+            StdlibFn::RealScratch => {
+                let count = super::builtins::real_scratch_count(args);
+                assert!(matches!(count, Expr::Var(name) if ctx.index_vars.contains(name)
+                    && !ctx.sentinel_vars.contains(name) && !ctx.real_vars.contains(name)
+                    && !ctx.enum_vars.contains_key(name)),
+                    "real_scratch_alloc: count must render in the unsigned index domain");
+                let count = render_expr(count, ctx, opt_real_params, registry, helpers);
+                format!("vec![f64::NAN; ({count}) as usize]")
+            }
             StdlibFn::Malloc => {
                 // malloc(N * sizeof(TYPE)) → vec![default; N as usize]
                 // sizeof renders as 1, so the arg is already the element count

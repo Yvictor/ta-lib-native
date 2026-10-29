@@ -2830,3 +2830,41 @@ fn rust_windowed_countdown_keeps_every_decrement_of_its_condition() {
         }
     }
 }
+
+#[test]
+fn private_real_scratch_changes_only_its_initialized_rust_storage() {
+    let (func, enums) = load_indicator("mavp");
+    let out = generate_all(&func, &enums);
+    let csharp = backends::csharp::generate(&func, &enums, make_registry(), make_helpers());
+    assert!(out.rust.contains("localOutputArray = vec![f64::NAN; (outputSize) as usize]"));
+    assert_eq!(out.rust.matches("vec![f64::NAN;").count(), 1);
+    assert!(out.rust.contains("localPeriodArray = vec![0_i32;"));
+    assert!(out.rust.contains("sortedIdx = vec![0_i32;"));
+    assert!(out.rust.contains("bucketOfs = vec![0_i32;"));
+    for generated in [&out.c, &out.java, &csharp, &out.rust] {
+        assert!(!generated.contains("real_scratch_alloc("));
+    }
+    assert!(out.c.contains("malloc((outputSize) * sizeof(double))"));
+    assert!(out.java.contains("new double[(int)(outputSize)]"));
+    assert!(csharp.contains("Rent((int)(outputSize))"));
+}
+
+#[test]
+fn private_real_scratch_refuses_signed_count_without_changing_malloc() {
+    use ir::{Expr, Statement};
+    let mut ctx = backends::rust_lang::RustRenderCtx::empty();
+    ctx.is_lookback = false;
+    ctx.vec_vars.insert("scratch".into());
+    ctx.index_vars.insert("count".into());
+    let stmt = Statement::Assign { target: Expr::Var("scratch".into()),
+        value: Expr::FuncCall("real_scratch_alloc".into(), vec![Expr::Var("count".into())]), compound: false };
+    assert!(render_rust_stmt_with_ctx(&stmt, &ctx).contains("vec![f64::NAN;"));
+    let ordinary = Statement::Assign { target: Expr::Var("scratch".into()), value: Expr::FuncCall("malloc".into(),
+        vec![Expr::BinOp(Box::new(Expr::Var("count".into())), ir::BinOp::Mul,
+            Box::new(Expr::FuncCall("sizeof".into(), vec![Expr::Var("double".into())])))]), compound: false };
+    assert!(render_rust_stmt_with_ctx(&ordinary, &ctx).contains("vec![0.0_f64;"));
+    ctx.index_vars.remove("count"); ctx.sentinel_vars.insert("count".into());
+    // This helper catches an actual renderer-context failure rather than relying
+    // on a declaration spelling (Index locals may themselves acquire signedness).
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| render_rust_stmt_with_ctx(&stmt, &ctx))).is_err());
+}

@@ -1638,7 +1638,7 @@ impl StatementEmitter for CsStmt<'_> {
     fn assign(&self, target: &Expr, value: &Expr, compound: bool, indent: usize) -> String {
         if let (Expr::Var(name), Expr::FuncCall(f, args)) = (target, value) {
             let element = self.ctx.pooled.and_then(|p| p.get(name));
-            if let (Some(element), Some(StdlibFn::Malloc), [size]) = (element, StdlibFn::from_name(f), args.as_slice()) {
+            if let (Some(element), Some(StdlibFn::Malloc | StdlibFn::RealScratch), [size]) = (element, StdlibFn::from_name(f), args.as_slice()) {
                 let pad = " ".repeat(indent);
                 let size = render_expr(size, self.ctx, self.registry, self.helpers);
                 let pool = format!("System.Buffers.ArrayPool<{element}>.Shared");
@@ -2889,6 +2889,10 @@ fn render_func_call(
             StdlibFn::Sizeof => {
                 // sizeof(TYPE) → 1: byte counts normalize to element counts.
                 "1".to_string()
+            }
+            StdlibFn::RealScratch => {
+                let count = render_expr(super::builtins::real_scratch_count(args), ctx, registry, helpers);
+                format!("new double[(int)({count})]")
             }
             StdlibFn::Malloc => {
                 // malloc(N * sizeof(TYPE)) → new TYPE[(int)(N)]

@@ -2597,6 +2597,10 @@ fn render_func_call(
                 // sizeof(TYPE) → 1: normalizes byte counts to element counts for Java array operations
                 "1".to_string()
             }
+            StdlibFn::RealScratch => {
+                let count = render_expr(super::builtins::real_scratch_count(args), ctx, registry, helpers);
+                format!("new double[(int)({count})]")
+            }
             StdlibFn::Malloc => {
                 // malloc(N * sizeof(TYPE)) → new TYPE_JAVA[(int)(N)]
                 // sizeof renders as 1, so the arg is already the element count

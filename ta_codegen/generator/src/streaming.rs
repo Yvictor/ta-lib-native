@@ -3769,7 +3769,7 @@ pub fn expr_allocates(e: &Expr) -> bool {
     let mut found = false;
     walk_expr(e, &mut |x| {
         if let Expr::FuncCall(name, _) = x {
-            if name == "malloc" || name == "TA_Malloc" {
+            if name == "malloc" || name == "TA_Malloc" || name == crate::backends::builtins::REAL_SCRATCH_ALLOC {
                 found = true;
             }
         }

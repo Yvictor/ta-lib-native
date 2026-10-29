@@ -373,8 +373,11 @@ public partial class Core
          }
          ReturnScratch(ref _rent_bucketOfs);
       } else {
-         _rent_localOutputArray = System.Buffers.ArrayPool<double>.Shared.Rent((int)(outputSize * 1));
-         localOutputArray = _rent_localOutputArray.AsSpan(0, (int)(outputSize * 1));
+         /* Private real scratch has no initial-value guarantee. Each MA writes
+          * its complete prefix before the selected outputs are read below.
+          */
+         _rent_localOutputArray = System.Buffers.ArrayPool<double>.Shared.Rent((int)(outputSize));
+         localOutputArray = _rent_localOutputArray.AsSpan(0, (int)(outputSize));
          _rent_sortedIdx = System.Buffers.ArrayPool<int>.Shared.Rent((int)(outputSize * 1));
          sortedIdx = _rent_sortedIdx.AsSpan(0, (int)(outputSize * 1));
          _rent_bucketOfs = System.Buffers.ArrayPool<int>.Shared.Rent((int)((maxUsed - minUsed + 2) * 1));
@@ -623,8 +626,8 @@ public partial class Core
          }
          ReturnScratch(ref _rent_bucketOfs);
       } else {
-         _rent_localOutputArray = System.Buffers.ArrayPool<double>.Shared.Rent((int)(outputSize * 1));
-         localOutputArray = _rent_localOutputArray.AsSpan(0, (int)(outputSize * 1));
+         _rent_localOutputArray = System.Buffers.ArrayPool<double>.Shared.Rent((int)(outputSize));
+         localOutputArray = _rent_localOutputArray.AsSpan(0, (int)(outputSize));
          _rent_sortedIdx = System.Buffers.ArrayPool<int>.Shared.Rent((int)(outputSize * 1));
          sortedIdx = _rent_sortedIdx.AsSpan(0, (int)(outputSize * 1));
          _rent_bucketOfs = System.Buffers.ArrayPool<int>.Shared.Rent((int)((maxUsed - minUsed + 2) * 1));

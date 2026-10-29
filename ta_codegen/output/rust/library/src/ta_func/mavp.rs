@@ -377,7 +377,9 @@ impl Core {
             }
             curPeriod = (maxUsed as usize) + 1;
         } else {
-            localOutputArray = vec![0.0_f64; (outputSize * 1) as usize];
+            // Private real scratch has no initial-value guarantee. Each MA writes
+            // its complete prefix before the selected outputs are read below.
+            localOutputArray = vec![f64::NAN; (outputSize) as usize];
             sortedIdx = vec![0_i32; (outputSize * 1) as usize];
             bucketOfs = vec![0_i32; ((maxUsed - minUsed + 2) * 1) as usize];
             // Counting sort: sortedIdx ends up holding the output indices ordered

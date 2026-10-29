@@ -6,6 +6,9 @@ use crate::ir::{
     LangClaim, Statement, VarType,
 };
 
+#[path = "real_scratch.rs"]
+mod real_scratch;
+
 // --- Public API ---
 
 #[derive(Debug, Clone)]
@@ -424,6 +427,11 @@ fn parse_c_source_named(source: &str, file: Option<&str>) -> ParsedCSource {
     let (tokens, tok_lines, comments) = tokenize_with_comments(source, file);
     let parsed = extract_functions(&tokens, &tok_lines, &comments, file);
     reject_implicit_narrowing(&parsed, file);
+    for function in &parsed.functions {
+        real_scratch::validate(&function.body, &function.params.iter().map(|(name, _)| name.clone()).collect());
+    }
+    real_scratch::reject(&parsed.lookback_body);
+    if let Some(shift) = &parsed.display_shift { real_scratch::reject(&shift.body); }
     parsed
 }
 
@@ -629,6 +637,7 @@ fn parse_helper_file_named(source: &str, file: Option<&str>) -> Vec<HelperDef> {
     let (tokens, tok_lines, _comments) = tokenize_with_comments(source, file);
     let helpers = extract_helper_functions(&tokens, &tok_lines, file);
     reject_implicit_narrowing_in_helpers(&helpers, file);
+    for helper in &helpers { real_scratch::reject(&helper.body); }
     helpers
 }
 

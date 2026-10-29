@@ -298,7 +298,7 @@ pub(crate) fn scratch_allocations(body: &[Statement]) -> Vec<(String, Expr)> {
 fn collect_allocations(body: &[Statement], found: &RefCell<Vec<(String, Expr)>>) {
     for s in body {
         if let Statement::Assign { target: Expr::Var(x), value: Expr::FuncCall(f, args), compound: false } = s {
-            if let (Some(StdlibFn::Malloc), [size]) = (StdlibFn::from_name(f), args.as_slice()) {
+            if let (Some(StdlibFn::Malloc | StdlibFn::RealScratch), [size]) = (StdlibFn::from_name(f), args.as_slice()) {
                 found.borrow_mut().push((x.clone(), size.clone()));
             }
         }

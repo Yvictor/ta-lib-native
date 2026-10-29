@@ -265,7 +265,9 @@ TA_RetCode mavp(int startIdx, int endIdx,
    }
    else
    {
-      localOutputArray = malloc((outputSize) * sizeof(double));
+      /* Private real scratch has no initial-value guarantee. Each MA writes
+       * its complete prefix before the selected outputs are read below. */
+      localOutputArray = real_scratch_alloc(outputSize);
       sortedIdx = malloc((outputSize) * sizeof(int));
       bucketOfs = malloc((maxUsed-minUsed+2) * sizeof(int));
       if( localOutputArray == NULL || sortedIdx == NULL || bucketOfs == NULL )
