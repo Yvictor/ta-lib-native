@@ -420,6 +420,7 @@ impl Core {
                     }
                 }
             } else {
+                cold_arm();
                 while todayIdx <= endIdx {
                     prevLow = newLow;
                     prevHigh = newHigh;

@@ -2830,3 +2830,29 @@ fn rust_windowed_countdown_keeps_every_decrement_of_its_condition() {
         }
     }
 }
+
+#[test]
+fn rust_collective_output_fallback_is_cold_without_marking_generic_windows() {
+    let registry = make_registry();
+    let helpers = make_helpers();
+    for name in ["sar", "sarext"] {
+        let (func, enums) = load_indicator(name);
+        let rust = backends::rust_lang::generate(&func, &enums, registry, helpers);
+        assert_eq!(rust.matches("cold_arm();").count(), 1, "{name}: {rust}");
+        let lines: Vec<&str> = rust.lines().map(str::trim).collect();
+        let hint = lines.iter().position(|l| *l == "cold_arm();").unwrap();
+        assert_eq!(lines[hint - 1], "} else {", "{name}: {rust}");
+        assert_eq!(lines[hint + 1], "while todayIdx <= endIdx {", "{name}: {rust}");
+        let loops = windowed_loop_bodies(&rust);
+        assert_eq!(loops.len(), 1, "{name}: {rust}");
+        assert!(!loops[0].contains("cold_arm();"), "{name}: {rust}");
+        let stream = rust.find("_step_impl(").expect("stream implementation");
+        assert!(!rust[stream..].contains("cold_arm();"), "{name}: {rust}");
+    }
+    for name in ["cdl2crows", "cdl3blackcrows"] {
+        let (func, enums) = load_indicator(name);
+        let rust = backends::rust_lang::generate(&func, &enums, registry, helpers);
+        assert!(rust.contains("if let (Some(_w0)"), "{name}: checked-window control missing");
+        assert!(!rust.contains("cold_arm();"), "{name}: generic fallback was marked cold");
+    }
+}

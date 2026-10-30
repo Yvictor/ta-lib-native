@@ -2966,15 +2966,18 @@ impl RustStmt<'_, '_> {
             same_len: &same_len,
             ring_storage: &ring_storage,
         };
+        let mut collective_fallback = false;
         let plan = super::rust_window::plan(condition, body, update, &names).or_else(|| {
             if update.is_some() || do_while {
                 return None;
             }
-            super::rust_window::collective_output_plan(
+            let plan = super::rust_window::collective_output_plan(
                 condition, body, &names,
                 &|a| self.output_names.iter().any(|n| n == a) && !ctx.int_output_names.contains(a),
                 &|name, args| try_inline_expr(self.helpers.get(name)?, args),
-            )
+            )?;
+            collective_fallback = true;
+            Some(plan)
         })?;
         // A tested counter steps before the do-while's first test, not its
         // first pass.
@@ -3049,6 +3052,9 @@ impl RustStmt<'_, '_> {
         }
         if plan.checked {
             out.push_str(&format!("{pad}    }} else {{\n"));
+            if collective_fallback {
+                out.push_str(&format!("{pad}        cold_arm();\n"));
+            }
             out.push_str(&unwindowed(indent + 8));
             out.push_str(&format!("{pad}    }}\n"));
         }
