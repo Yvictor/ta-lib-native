@@ -234,7 +234,7 @@ impl Core {
             tempReal = inReal[inIdx];
             inIdx += 1;
             periodSub += tempReal;
-            periodSum += tempReal * ((i) as f64);
+            periodSum += tempReal * ((i) as i32 as f64);
             i += 1;
         }
         barsSinceReseed = (8 * optInTimePeriod) as usize;
@@ -298,7 +298,7 @@ impl Core {
                 for j in (inIdx - lookbackWin as usize)..(inIdx as usize) + 1 {
                     tempReal = inReal[j];
                     periodSub += tempReal;
-                    periodSum += tempReal * ((rw) as f64);
+                    periodSum += tempReal * ((rw) as i32 as f64);
                     rw += 1;
                 }
                 j = (inIdx as usize) + 1;
@@ -532,7 +532,7 @@ impl Core {
             loop {
                 tempReal = sp.win_j_inReal[((if sp.winPos_j + sp.winCap_j - j >= sp.winCap_j { sp.winPos_j + sp.winCap_j - j - sp.winCap_j } else { sp.winPos_j + sp.winCap_j - j })) as usize];
                 sp.periodSub += tempReal;
-                sp.periodSum += tempReal * ((rw) as f64);
+                sp.periodSum += tempReal * ((rw) as i32 as f64);
                 rw += 1;
                 if j == 0 { break; }
                 j -= 1;
@@ -623,7 +623,7 @@ impl Core {
             loop {
                 tempReal = tape[(tapeBase - j & tapeMask) as usize];
                 sp.periodSub += tempReal;
-                sp.periodSum += tempReal * ((rw) as f64);
+                sp.periodSum += tempReal * ((rw) as i32 as f64);
                 rw += 1;
                 if j == 0 { break; }
                 j -= 1;
@@ -769,7 +769,7 @@ impl Core {
             tempReal = inReal[inIdx];
             inIdx += 1;
             periodSub += tempReal;
-            periodSum += tempReal * ((i) as f64);
+            periodSum += tempReal * ((i) as i32 as f64);
             i += 1;
         }
         barsSinceReseed = (8 * optInTimePeriod) as usize;
@@ -833,7 +833,7 @@ impl Core {
                 for j in (inIdx - lookbackWin as usize)..(inIdx as usize) + 1 {
                     tempReal = inReal[j];
                     periodSub += tempReal;
-                    periodSum += tempReal * ((rw) as f64);
+                    periodSum += tempReal * ((rw) as i32 as f64);
                     rw += 1;
                 }
                 j = (inIdx as usize) + 1;
@@ -1123,7 +1123,7 @@ impl WmaStream {
                 loop {
                     tempReal = (if ((if sp.winPos_j + sp.winCap_j - j >= sp.winCap_j { sp.winPos_j + sp.winCap_j - j - sp.winCap_j } else { sp.winPos_j + sp.winCap_j - j }) as usize) != pkSlot0 { sp.win_j_inReal[((if sp.winPos_j + sp.winCap_j - j >= sp.winCap_j { sp.winPos_j + sp.winCap_j - j - sp.winCap_j } else { sp.winPos_j + sp.winCap_j - j })) as usize] } else { pkVal0 });
                     periodSub += tempReal;
-                    periodSum += tempReal * ((rw) as f64);
+                    periodSum += tempReal * ((rw) as i32 as f64);
                     rw += 1;
                     if j == 0 { break; }
                     j -= 1;
@@ -1281,7 +1281,7 @@ impl WmaStream {
                 loop {
                     tempReal = (if ((tapeBase - j & tapeMask) as usize) != pkSlot0 { tape[(tapeBase - j & tapeMask) as usize] } else { pkVal0 });
                     periodSub += tempReal;
-                    periodSum += tempReal * ((rw) as f64);
+                    periodSum += tempReal * ((rw) as i32 as f64);
                     rw += 1;
                     if j == 0 { break; }
                     j -= 1;

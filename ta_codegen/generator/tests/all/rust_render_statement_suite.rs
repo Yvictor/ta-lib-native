@@ -2830,3 +2830,68 @@ fn rust_windowed_countdown_keeps_every_decrement_of_its_condition() {
         }
     }
 }
+
+#[test]
+fn signed_weight_cast_parser_preserves_both_types() {
+    let parsed = parser::c_source::parse_c_source_str(
+        "TA_RetCode TEST(void) { int weight; double value; value = (double)((int)weight); return TA_SUCCESS; }",
+    );
+    let ir::Statement::Assign { value, .. } = &parsed.functions[0].body[2] else { panic!("cast assignment") };
+    let ir::Expr::Cast(ir::VarType::Real, integer) = value else { panic!("outer double cast") };
+    let ir::Expr::Cast(ir::VarType::Integer, weight) = integer.as_ref() else { panic!("inner int cast") };
+    assert!(matches!(weight.as_ref(), ir::Expr::Var(name) if name == "weight"));
+}
+
+#[test]
+fn signed_weight_cast_keeps_int_and_index_domains_distinct() {
+    let mut ctx = backends::rust_lang::RustRenderCtx::empty();
+    ctx.real_vars.insert("value".into());
+    ctx.index_vars.insert("weight".into());
+    ctx.sentinel_vars.insert("negative".into());
+    let cast = |outer, inner| ir::Statement::Assign {
+        target: ir::Expr::Var("value".into()),
+        value: ir::Expr::Cast(ir::VarType::Real, Box::new(ir::Expr::Cast(outer, Box::new(inner)))),
+        compound: false,
+    };
+    for name in ["weight", "negative"] {
+        let out = render_rust_stmt_with_ctx(&cast(ir::VarType::Integer, ir::Expr::Var(name.into())), &ctx);
+        assert!(out.contains(&format!("({name}) as i32 as f64")), "explicit C int width lost: {out}");
+    }
+    let index = render_rust_stmt_with_ctx(&cast(ir::VarType::Index, ir::Expr::Var("weight".into())), &ctx);
+    assert!(index.contains("as usize as f64") && !index.contains("as i32"), "size_t must not narrow: {index}");
+    let real = render_rust_stmt_with_ctx(&cast(ir::VarType::Real, ir::Expr::Var("weight".into())), &ctx);
+    assert!(real.contains("as f64 as f64") && !real.contains("as i32"), "double cast must not narrow: {real}");
+    let expr = ir::Expr::BinOp(Box::new(ir::Expr::Var("weight".into())), ir::BinOp::Add, Box::new(ir::Expr::IntLiteral(1)));
+    let arithmetic = render_rust_stmt_with_ctx(&cast(ir::VarType::Integer, expr), &ctx);
+    assert!(arithmetic.contains("(weight + 1) as i32 as f64"), "cast must cover whole expression: {arithmetic}");
+}
+
+#[test]
+#[should_panic(expected = "a (int) cast of a possibly-negative double is only supported")]
+fn signed_weight_cast_does_not_allow_nested_negative_float_narrowing() {
+    let (func, enums) = common::load_indicator_with_source("wma", "
+        TA_RetCode wma(int startIdx, int endIdx, const double inReal[], int optInTimePeriod,
+                         int *outBegIdx, int *outNBElement, double outReal[]) {
+            double sample;
+            sample = inReal[startIdx];
+            outReal[0] = (double)((int)sample);
+            *outBegIdx = startIdx; *outNBElement = 1;
+            return TA_SUCCESS;
+        }");
+    backends::rust_lang::generate(&func, &enums, make_registry(), make_helpers());
+}
+
+#[test]
+fn signed_weight_cast_preserves_wma_integer_counters_and_unfused_compound_products() {
+    let (func, enums) = load_indicator("wma");
+    let out = generate_all(&func, &enums);
+    assert!(out.rust.contains("let mut rw: usize"));
+    assert!(out.rust.contains("(i) as i32 as f64") && out.rust.contains("(rw) as i32 as f64"));
+    assert!(!out.rust.contains("mul_add(") && !out.c.contains("fma(") && !out.java.contains("Math.fma("));
+    for text in [&out.c, &out.java] {
+        assert!(text.contains("(double)(int)i") && text.contains("(double)(int)rw"), "nested casts lost: {text}");
+    }
+    let cs = backends::csharp::generate(&func, &enums, make_registry(), make_helpers());
+    assert!(cs.contains("(double)(int)i") && cs.contains("(double)(int)rw"));
+    assert!(!cs.contains("FusedMultiplyAdd("));
+}

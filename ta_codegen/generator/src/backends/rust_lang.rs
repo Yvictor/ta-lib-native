@@ -4428,6 +4428,9 @@ impl ExprEmitter for RustExpr<'_> {
     fn cast(&self, var_type: &VarType, inner: &Expr) -> String {
         // IntLiteral cast to f64 -> emit as float literal (e.g., 0.0 instead of (0) as f64)
         if matches!(var_type, VarType::Real) {
+            if let Expr::Cast(VarType::Integer, narrowed) = inner {
+                return format!("({}) as i32 as f64", self.walk(narrowed));
+            }
             if let Expr::IntLiteral(n) = inner {
                 return format!("{n}.0");
             }

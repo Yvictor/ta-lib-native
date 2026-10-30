@@ -114,7 +114,7 @@ TA_RetCode wma(int startIdx, int endIdx,
       tempReal = inReal[inIdx];
       inIdx++;
       periodSub += tempReal;
-      periodSum += tempReal*i;
+      periodSum += tempReal*(double)((int)i);
       i++;
    }
    barsSinceReseed = 8 * optInTimePeriod;
@@ -185,7 +185,7 @@ TA_RetCode wma(int startIdx, int endIdx,
          {
             tempReal = inReal[j];
             periodSub += tempReal;
-            periodSum += tempReal*rw;
+            periodSum += tempReal*(double)((int)rw);
             rw++;
          }
       }

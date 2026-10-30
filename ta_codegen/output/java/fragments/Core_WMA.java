@@ -165,7 +165,7 @@
          tempReal = inReal[inIdx];
          inIdx += 1;
          periodSub += tempReal;
-         periodSum += tempReal * i;
+         periodSum += tempReal * (double)(int)i;
          i += 1;
       }
       barsSinceReseed = 8 * optInTimePeriod;
@@ -231,7 +231,7 @@
             for( j = inIdx - lookbackWin; j <= inIdx; j += 1 ) {
                tempReal = inReal[j];
                periodSub += tempReal;
-               periodSum += tempReal * rw;
+               periodSum += tempReal * (double)(int)rw;
                rw += 1;
             }
          }
@@ -316,7 +316,7 @@
          tempReal = (double)inReal[inIdx];
          inIdx += 1;
          periodSub += tempReal;
-         periodSum += tempReal * i;
+         periodSum += tempReal * (double)(int)i;
          i += 1;
       }
       barsSinceReseed = 8 * optInTimePeriod;
@@ -335,7 +335,7 @@
             for( j = inIdx - lookbackWin; j <= inIdx; j += 1 ) {
                tempReal = (double)inReal[j];
                periodSub += tempReal;
-               periodSum += tempReal * rw;
+               periodSum += tempReal * (double)(int)rw;
                rw += 1;
             }
          }
@@ -684,7 +684,7 @@
             for( j = sp.lookbackWin; j >= 0; j -= 1 ) {
                tempReal = (((sp.winPos_j + sp.winCap_j - j >= sp.winCap_j) ? sp.winPos_j + sp.winCap_j - j - sp.winCap_j : sp.winPos_j + sp.winCap_j - j) != pkSlot0) ? sp.win_j_inReal[(sp.winPos_j + sp.winCap_j - j >= sp.winCap_j) ? sp.winPos_j + sp.winCap_j - j - sp.winCap_j : sp.winPos_j + sp.winCap_j - j] : pkVal0;
                periodSub += tempReal;
-               periodSum += tempReal * rw;
+               periodSum += tempReal * (double)(int)rw;
                rw += 1;
             }
          }
@@ -795,7 +795,7 @@
          for( j = sp.lookbackWin; j >= 0; j -= 1 ) {
             tempReal = sp.win_j_inReal[(sp.winPos_j + sp.winCap_j - j >= sp.winCap_j) ? sp.winPos_j + sp.winCap_j - j - sp.winCap_j : sp.winPos_j + sp.winCap_j - j];
             sp.periodSub += tempReal;
-            sp.periodSum += tempReal * rw;
+            sp.periodSum += tempReal * (double)(int)rw;
             rw += 1;
          }
       }
@@ -941,7 +941,7 @@
          tempReal = inReal[inIdx];
          inIdx += 1;
          periodSub += tempReal;
-         periodSum += tempReal * i;
+         periodSum += tempReal * (double)(int)i;
          i += 1;
       }
       barsSinceReseed = 8 * optInTimePeriod;
@@ -1007,7 +1007,7 @@
             for( j = inIdx - lookbackWin; j <= inIdx; j += 1 ) {
                tempReal = inReal[j];
                periodSub += tempReal;
-               periodSum += tempReal * rw;
+               periodSum += tempReal * (double)(int)rw;
                rw += 1;
             }
          }
@@ -1197,7 +1197,7 @@
          for( j = sp.lookbackWin; j >= 0; j -= 1 ) {
             tempReal = tape[(tapeBase - j) & tapeMask];
             sp.periodSub += tempReal;
-            sp.periodSum += tempReal * rw;
+            sp.periodSum += tempReal * (double)(int)rw;
             rw += 1;
          }
       }
@@ -1287,7 +1287,7 @@
          for( j = sp.lookbackWin; j >= 0; j -= 1 ) {
             tempReal = (((tapeBase - j) & tapeMask) != pkSlot0) ? tape[(tapeBase - j) & tapeMask] : pkVal0;
             periodSub += tempReal;
-            periodSum += tempReal * rw;
+            periodSum += tempReal * (double)(int)rw;
             rw += 1;
          }
       }

@@ -1,0 +1,11 @@
+{
+  "reference": "official C0.8.3 commit62021c1d14ef5499505af5547384cab509adf3fc",
+  "C_library_sha256": "5041065b3814d8df0f9238c9c7acc65d66ae0f51c63f376f765322f6273691b8",
+  "cases": 48,
+  "binary_bytes": 344480,
+  "binary_sha256": "9d15ff42749915e825aee787ac216e5545a1f4735c801a91795a2d9c62d1e17f",
+  "tsv_sha256": "99e013bc67556544bf872b63ec7bf18b1183707ff0c72157b6f977fee8640d81",
+  "inputs": "Exactdyadic64+((i%37)-18)*0.125;spike1e9atn/3;offset1e12;signedzerosalternatingeverythirdbar. Publicstreamseed/update/peek/clone andMAVPperiodcycle2,7,14,30.",
+  "float_comparison": "Allfixedfiniteinputoutputwordsandphysicalcanariesrawexact; separate1966casecampaignincludesNaN/Inf positions andfullyreplayed originalCCD/C083/new.",
+  "scope": "Batch+MA+MAVP+publicWMAstream+MAVPbank/tape; canonicalsourceweights1..100000 exactlyrepresentable."
+}

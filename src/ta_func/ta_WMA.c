@@ -195,7 +195,7 @@ TA_LIB_API TA_RetCode TA_WMA( int    startIdx,
       tempReal = inReal[inIdx];
       inIdx += 1;
       periodSub += tempReal;
-      periodSum += tempReal * i;
+      periodSum += tempReal * (double)(int)i;
       i += 1;
    }
    barsSinceReseed = 8 * optInTimePeriod;
@@ -264,7 +264,7 @@ TA_LIB_API TA_RetCode TA_WMA( int    startIdx,
          {
             tempReal = inReal[j];
             periodSub += tempReal;
-            periodSum += tempReal * rw;
+            periodSum += tempReal * (double)(int)rw;
             rw += 1;
          }
       }
@@ -361,7 +361,7 @@ TA_RetCode TA_S_WMA( int    startIdx,
       tempReal = (double)inReal[inIdx];
       inIdx += 1;
       periodSub += tempReal;
-      periodSum += tempReal * i;
+      periodSum += tempReal * (double)(int)i;
       i += 1;
    }
    barsSinceReseed = 8 * optInTimePeriod;
@@ -383,7 +383,7 @@ TA_RetCode TA_S_WMA( int    startIdx,
          {
             tempReal = (double)inReal[j];
             periodSub += tempReal;
-            periodSum += tempReal * rw;
+            periodSum += tempReal * (double)(int)rw;
             rw += 1;
          }
       }
@@ -513,7 +513,7 @@ static void TA_WMA_StepImpl( struct TA_WMA_Stream *sp, double inReal, double *ou
       {
          tempReal = sp->win_j_inReal[(sp->winPos_j + sp->winCap_j - j >= sp->winCap_j) ? sp->winPos_j + sp->winCap_j - j - sp->winCap_j : sp->winPos_j + sp->winCap_j - j];
          periodSub += tempReal;
-         periodSum += tempReal * rw;
+         periodSum += tempReal * (double)(int)rw;
          rw += 1;
       }
    }
@@ -691,7 +691,7 @@ static TA_RetCode TA_WMA_OpenImpl( struct TA_WMA_Stream **stream, const double i
          tempReal = inReal[inIdx];
          inIdx += 1;
          periodSub += tempReal;
-         periodSum += tempReal * i;
+         periodSum += tempReal * (double)(int)i;
          i += 1;
       }
       barsSinceReseed = 8 * optInTimePeriod;
@@ -760,7 +760,7 @@ static TA_RetCode TA_WMA_OpenImpl( struct TA_WMA_Stream **stream, const double i
             {
                tempReal = inReal[j];
                periodSub += tempReal;
-               periodSum += tempReal * rw;
+               periodSum += tempReal * (double)(int)rw;
                rw += 1;
             }
          }
@@ -949,7 +949,7 @@ TA_LIB_API TA_RetCode TA_WMA_Peek( const TA_WMA_Stream *stream, double inReal, d
       for( j = sp->lookbackWin; j >= 0; j -= 1 )
       {
          tempReal = (((sp->winPos_j + sp->winCap_j - j >= sp->winCap_j) ? sp->winPos_j + sp->winCap_j - j - sp->winCap_j : sp->winPos_j + sp->winCap_j - j) != pkSlot0) ? win_j_inReal[(sp->winPos_j + sp->winCap_j - j >= sp->winCap_j) ? sp->winPos_j + sp->winCap_j - j - sp->winCap_j : sp->winPos_j + sp->winCap_j - j] : pkVal0;
-         periodSum += tempReal * rw;
+         periodSum += tempReal * (double)(int)rw;
          rw += 1;
       }
    }
@@ -1036,7 +1036,7 @@ void TA_WMA_StepTape( struct TA_WMA_Stream *sp, const double tape[], int tapeBas
       {
          tempReal = tape[(tapeBase - j) & tapeMask];
          periodSub += tempReal;
-         periodSum += tempReal * rw;
+         periodSum += tempReal * (double)(int)rw;
          rw += 1;
       }
    }
@@ -1128,7 +1128,7 @@ void TA_WMA_PeekTape( const struct TA_WMA_Stream *sp, const double tape[], int t
       for( j = sp->lookbackWin; j >= 0; j -= 1 )
       {
          tempReal = (((tapeBase - j) & tapeMask) != pkSlot0) ? tape[(tapeBase - j) & tapeMask] : pkVal0;
-         periodSum += tempReal * rw;
+         periodSum += tempReal * (double)(int)rw;
          rw += 1;
       }
    }
