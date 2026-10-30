@@ -1,4 +1,4 @@
-//! Innermost batch loops as a counted `for` over slices cut once at entry
+//! Batch loops as a counted `for` over slices cut once at entry
 //! (#442).
 //!
 //! C's loops advance several indices in lockstep (`today`, `trailingIdx`,
@@ -8,7 +8,7 @@
 //! `let _wJ = &a[start..][..len]` inside `for _wk in 0.._wn`, and the checks
 //! go.
 //!
-//! Rust-only and render-time: [`plan`] reads the loop as written and returns
+//! Rust-only and render-time: the planners read the loop as written and return
 //! its body with those accesses re-indexed. Every statement stays, the index
 //! updates included, so each variable holds C's value inside and after the
 //! loop.
@@ -163,6 +163,181 @@ fn variant_branches(pass: &[Statement], facts: &Facts) -> bool {
         }
         _ => false,
     })
+}
+
+
+/// A scalar recurrence whose occasional read-only rebuild loops leave its
+/// three advancing accesses alone. Rebuild accesses keep their own bounds.
+pub(crate) fn recurrence_plan(cond: &Expr, body: &[Statement], names: &Names) -> Option<Plan> {
+    let form = form(cond, names)?;
+    if form.step != 1 || form.cond_step.is_some() {
+        return None;
+    }
+    let mut shape = RecurrenceShape::default();
+    shape.pure(cond)?;
+    shape.visit(body, false, false)?;
+    if shape.nested == 0 || shape.reads.len() != 1 || shape.stores != 1 {
+        return None;
+    }
+    let input = shape.reads.first()?;
+    let output = shape.output.as_ref()?;
+    if input == output || !(names.same_len)(input) || !(names.sliceable)(input) || !(names.sliceable)(output) {
+        return None;
+    }
+    let mut facts = Facts::of(body);
+    let nested = Facts::of(&shape.effects);
+    facts.other.extend(nested.assigned.iter().cloned());
+    facts.assigned.extend(nested.assigned);
+    facts.other.extend(nested.other);
+    facts.bare.extend(nested.bare);
+    if facts.assigned.contains(input) || facts.assigned.contains(output)
+        || facts.bare.contains(input) || facts.bare.contains(output)
+        || shape.bare.contains(input) || shape.bare.contains(output)
+        || !invariant(&form.bound, &facts) {
+        return None;
+    }
+    let steps: BTreeMap<_, _> = facts.induction().into_iter().filter(|(v, _)| (names.index)(v)).collect();
+    if steps.get(&form.counter) != Some(&1) {
+        return None;
+    }
+    let analysis = Analysis { steps: &steps, facts: &facts, names, branches: true };
+    let occs = analysis.occurrences(body);
+    let selected: Vec<_> = occs.iter().enumerate().filter(|(_, o)| o.every).collect();
+    if selected.len() != 3 {
+        return None;
+    }
+    let mut windows = Vec::new();
+    let mut assign = vec![None; occs.len()];
+    let mut indices = BTreeSet::new();
+    let mut input_indices = BTreeSet::new();
+    let mut outputs = 0;
+    for (at, occurrence) in selected {
+        let Expr::Var(index) = &occurrence.index else { return None };
+        if occurrence.offset != 0 || steps.get(index) != Some(&1) || !indices.insert(index.clone()) {
+            return None;
+        }
+        if &occurrence.array == input {
+            input_indices.insert(index.clone());
+        } else if &occurrence.array == output {
+            outputs += 1;
+        } else {
+            return None;
+        }
+        assign[at] = Some((windows.len(), 0));
+        windows.push(Window {
+            array: occurrence.array.clone(),
+            mutable: &occurrence.array == output,
+            start: occurrence.index.clone(),
+            extra: 0,
+        });
+    }
+    if input_indices.len() != 2 || !input_indices.contains(&form.counter) || outputs != 1 {
+        return None;
+    }
+    let first_rebuild = body.iter().position(contains_rebuild)?;
+    let prefix = &body[..first_rebuild];
+    let prefix_inputs = analysis.occurrences(prefix).iter().filter(|o| o.every && &o.array == input).count();
+    let trailing = input_indices.iter().find(|index| *index != &form.counter)?;
+    if prefix_inputs != 2 || !prefix.iter().any(|s| step_of(s) == Some((trailing.as_str(), 1))) {
+        return None;
+    }
+    Some(Plan {
+        guard: form.guard,
+        trip: form.trip,
+        windows,
+        reverse: false,
+        body: rewrite(body, &assign, &mut 0),
+        cond_step: None,
+        may_pass_unguarded: false,
+        checked: true,
+    })
+}
+
+fn contains_rebuild(statement: &Statement) -> bool {
+    match statement {
+        Statement::ForC { .. } => true,
+        Statement::If { then_body, else_body, .. } => then_body.iter().chain(else_body).any(contains_rebuild),
+        _ => false,
+    }
+}
+
+#[derive(Default)]
+struct RecurrenceShape {
+    bare: BTreeSet<String>,
+    reads: BTreeSet<String>,
+    output: Option<String>,
+    stores: usize,
+    nested: usize,
+    effects: Vec<Statement>,
+}
+
+impl RecurrenceShape {
+    fn name(name: &str) -> Option<()> {
+        (!name.contains('.') && name != TRIP && name != PASS
+            && !name.strip_prefix("_w").is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())))
+            .then_some(())
+    }
+
+    fn pure(&mut self, expr: &Expr) -> Option<()> {
+        match expr {
+            Expr::Literal(_) | Expr::IntLiteral(_) => {},
+            Expr::Var(name) => { Self::name(name)?; self.bare.insert(name.clone()); },
+            Expr::ArrayAccess(array, index) => {
+                Self::name(array)?;
+                self.reads.insert(array.clone());
+                self.pure(index)?;
+            },
+            Expr::BinOp(left, _, right) => { self.pure(left)?; self.pure(right)?; },
+            Expr::Ternary(condition, left, right) => { self.pure(condition)?; self.pure(left)?; self.pure(right)?; },
+            Expr::Cast(_, inner) | Expr::Not(inner) | Expr::Neg(inner) | Expr::BitwiseNot(inner) => self.pure(inner)?,
+            Expr::FuncCall(name, args) if eager_call(name) => {
+                for arg in args { self.pure(arg)?; }
+            },
+            _ => return None,
+        }
+        Some(())
+    }
+
+    fn visit(&mut self, body: &[Statement], conditional: bool, nested: bool) -> Option<()> {
+        for statement in body {
+            match statement {
+                Statement::Assign { target, value, compound } => {
+                    self.pure(value)?;
+                    match target {
+                        Expr::Var(name) => Self::name(name)?,
+                        Expr::ArrayAccess(array, index) if !nested && !conditional && !compound => {
+                            Self::name(array)?;
+                            let index = if let Expr::PostIncrement(inner) = index.as_ref() { inner.as_ref() } else { index.as_ref() };
+                            if !matches!(index, Expr::Var(_)) { return None; }
+                            self.pure(index)?;
+                            self.stores += 1;
+                            if self.output.replace(array.clone()).is_some() { return None; }
+                        },
+                        _ => return None,
+                    }
+                    if nested { self.effects.push(statement.clone()); }
+                },
+                Statement::If { condition, then_body, else_body, .. } => {
+                    self.pure(condition)?;
+                    self.visit(then_body, true, nested)?;
+                    self.visit(else_body, true, nested)?;
+                },
+                Statement::ForC { init, condition, update, body } if !nested => {
+                    self.nested += 1;
+                    self.visit(std::slice::from_ref(init.as_ref()), true, true)?;
+                    self.pure(condition)?;
+                    self.visit(body, true, true)?;
+                    self.visit(std::slice::from_ref(update.as_ref()), true, true)?;
+                },
+                Statement::Expr(expr) => {
+                    self.pure(expr)?;
+                },
+                Statement::Comment(_) | Statement::UnrollHint { .. } => {},
+                _ => return None,
+            }
+        }
+        Some(())
+    }
 }
 
 fn step(v: &str, d: i64) -> Statement {
@@ -1000,6 +1175,139 @@ mod tests {
             each_access(s, &mut |a, i, _| out.push(format!("{a}[{}]", render_marker(i).unwrap_or_else(|| text(i)))));
         }
         out
+    }
+
+
+    fn recurrence(body: &[Statement]) -> Option<Plan> {
+        let index = |n: &str| ["i", "j", "k", "b", "e", "n"].contains(&n);
+        let usize_expr = |e: &Expr| matches!(e, Expr::Var(n) if index(n));
+        recurrence_plan(&bin(v("i"), BinOp::LessEq, v("e")), body, &Names {
+            index: &index, usize_expr: &usize_expr, castable: &|_| false,
+            sliceable: &|_| true, same_len: &|a| a == "in" || a == "in2",
+            ring_storage: &|_| None,
+        })
+    }
+    fn rebuild() -> Statement {
+        Statement::ForC {
+            init: Box::new(set(v("b"), int(0))),
+            condition: bin(v("b"), BinOp::LessEq, v("i")),
+            update: Box::new(inc("b")),
+            body: vec![set(v("s"), plus(v("s"), at("in", v("b"))))],
+        }
+    }
+    fn recurring() -> Vec<Statement> {
+        vec![set(v("s"), at("in", v("i"))), set(v("s"), at("in", v("j"))), inc("j"),
+            Statement::If { condition: bin(v("s"), BinOp::Greater, Expr::Literal(0.1)),
+                then_body: vec![rebuild(), set(v("s"), at("in", v("i")))],
+                else_body: vec![], cond_comments: vec![] },
+            set(at("out", v("k")), v("s")), inc("k"), inc("i")]
+    }
+    #[test]
+    fn recurrence_windows_preserve_rebuilds_and_every_scalar_operation() {
+        let body = recurring(); let plan = recurrence(&body).expect("recurrence");
+        assert!(plan.checked); assert_eq!(plan.windows.len(), 3);
+        assert_eq!(accesses(&plan), ["in[_w0[_wk]]", "in[_w1[_wk]]", "in[Var(\"i\")]", "out[_w2[_wk]]"]);
+        let indices = ["i", "j", "k"];
+        let restored: Vec<_> = plan.body.iter().map(|s| map_accesses(s, &mut |e| {
+            if let Expr::ArrayAccess(array, idx) = &e {
+                if let Some(marker) = render_marker(idx) {
+                    let j: usize = marker[2..].split('[').next().unwrap().parse().unwrap();
+                    return at(array, v(indices[j]));
+                }
+            }
+            e
+        })).collect();
+        assert_eq!(format!("{restored:?}"), format!("{body:?}"));
+        let mut post = body.clone(); post[4] = set(at("out", Expr::PostIncrement(Box::new(v("k")))), v("s")); post.remove(5);
+        assert_eq!(format!("{:?}", recurrence(&post).unwrap().body), format!("{:?}", plan.body));
+    }
+    #[test]
+    fn recurrence_proof_declines_effects_escapes_and_induction_changes() {
+        let mut negatives = Vec::new();
+        for statement in [set(v("i"), int(0)), set(v("j"), int(0)), set(v("k"), int(0)), set(v("e"), int(0)),
+            set(v("in"), v("other")), set(v("out"), v("other")),
+            set(v("alias"), v("in")), set(v("alias"), v("out")),
+            set(v("s"), at("in2", v("i"))), set(v("s"), at("out", v("k"))),
+            Statement::Expr(Expr::FuncCall("effect".into(), vec![v("i")])),
+            Statement::Expr(Expr::AddressOf(Box::new(v("i")))), Statement::Break, Statement::Continue,
+            Statement::Return { value: None }, Statement::VarDecl { var_type: VarType::Index, name: "i".into(), init: None },
+            set(v("_wk"), int(0)), set(v("s"), at("_w0", v("b")))] {
+            let mut body = recurring(); body.insert(0, statement); negatives.push(body);
+        }
+        for statement in [set(v("i"), int(0)), inc("i"), inc("j"), inc("k"), set(v("e"), int(0)),
+            set(at("out", v("k")), v("s")), set(at("in", v("b")), v("s")),
+            set(v("alias"), v("in")), set(v("alias"), v("out")),
+            set(v("s"), Expr::FuncCall("hidden".into(), vec![])),
+            set(v("_wn"), int(0)), Statement::Break, Statement::Continue, rebuild()] {
+            let mut body = recurring();
+            let Statement::If { then_body, .. } = &mut body[3] else { unreachable!() };
+            let Statement::ForC { body: nested, .. } = &mut then_body[0] else { unreachable!() };
+            nested.push(statement); negatives.push(body);
+        }
+        for pos in [2, 5, 6] { let mut b = recurring(); b.remove(pos); negatives.push(b); }
+        let mut b = recurring(); b.push(inc("i")); negatives.push(b);
+        let mut b = recurring(); b[0] = set(v("s"), at("in", plus(v("i"), int(1)))); negatives.push(b);
+        let mut b = recurring(); b[4] = Statement::If { condition: v("s"), then_body: vec![b[4].clone()], else_body: vec![], cond_comments: vec![] }; negatives.push(b);
+        let mut b = recurring(); let rebuild = b.remove(3); b.insert(1, rebuild); negatives.push(b);
+        let mut b = recurring(); let trailing_step = b.remove(2); b.insert(3, trailing_step); negatives.push(b);
+        let mut b = recurring(); let trailing_read = b.remove(1); b.insert(3, trailing_read); negatives.push(b);
+        let mut b = recurring(); let trailing_read = b.remove(1); let trailing_step = b.remove(1); b.insert(2, trailing_read); b.insert(3, trailing_step); negatives.push(b);
+        println!("{} adverse recurrence shapes declined", negatives.len());
+        for (i, body) in negatives.iter().enumerate() { assert!(recurrence(body).is_none(), "negative {i}: {body:?}"); }
+    }
+
+
+    #[test]
+    fn recurrence_inventory_admits_only_the_single_variance_batch_loop() {
+        use crate::backends::rust_lang::RustRenderCtx;
+        use crate::ir::{Lang, ParamType};
+        fn loops(body: &[Statement], found: &mut Vec<(Expr, Vec<Statement>)>) {
+            for statement in body {
+                match statement {
+                    Statement::While { condition, body } | Statement::DoWhile { condition, body } => {
+                        found.push((condition.clone(), body.clone())); loops(body, found);
+                    },
+                    Statement::ForC { body, .. } | Statement::For { body, .. } | Statement::Block { body } => loops(body, found),
+                    Statement::If { then_body, else_body, .. } => { loops(then_body, found); loops(else_body, found); },
+                    Statement::Switch { cases, default, .. } => {
+                        for (_, body) in cases { loops(body, found); } loops(default, found);
+                    },
+                    _ => {},
+                }
+            }
+        }
+        let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../input");
+        let mut admitted = Vec::new(); let mut count = 0; let mut scoped_refusals = Vec::new();
+        for entry in std::fs::read_dir(&base).unwrap() {
+            let path = entry.unwrap().path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else { continue };
+            let yaml = path.join(format!("{name}.yaml")); let source = path.join(format!("{name}.c"));
+            if !yaml.is_file() || !source.is_file() { continue; }
+            count += 1;
+            let mut func = crate::parser::yaml::parse_yaml(&yaml);
+            crate::parser::c_source::wire_parsed_source(&mut func, &crate::parser::c_source::parse_c_source(&source));
+            let func = func.resolved_for(Lang::Rust);
+            let mut ctx = RustRenderCtx::for_lookback(&func.body);
+            ctx.index_vars.extend(["startIdx".to_string(), "endIdx".to_string(), "outBegIdx".to_string(), "outNBElement".to_string()]);
+            let index = |n: &str| ctx.index_vars.contains(n) && !ctx.sentinel_vars.contains(n);
+            let usize_expr = |e: &Expr| matches!(e, Expr::IntLiteral(_)) || matches!(e, Expr::Var(n) if index(n));
+            let castable = |e: &Expr| matches!(e, Expr::Var(n) if func.optional_inputs.iter().any(|p| p.name == *n && p.param_type == ParamType::Integer));
+            let sliceable = |a: &str| !(ctx.real_array_vars.contains(a) || ctx.int_vec_vars.contains(a) && !ctx.vec_vars.contains(a));
+            let same_len = |a: &str| func.inputs.iter().any(|p| p.name == a && p.param_type == ParamType::Real);
+            let names = Names { index: &index, usize_expr: &usize_expr, castable: &castable, sliceable: &sliceable, same_len: &same_len, ring_storage: &|_| None };
+            let mut candidates = Vec::new(); loops(&func.body, &mut candidates);
+            for (condition, body) in candidates {
+                let got = recurrence_plan(&condition, &body, &names);
+                assert!(!(matches!(name, "kurtosis" | "wma") && got.is_some()), "late-read rebuild admitted: {name}");
+                if plan(&condition, &body, None, &names).is_none() && got.is_some() { admitted.push(name.to_string()); }
+            }
+            if matches!(name, "kurtosis" | "wma") { scoped_refusals.push(name.to_string()); }
+        }
+        admitted.sort();
+        assert_eq!(count, 237);
+        assert_eq!(admitted, ["var"]);
+        scoped_refusals.sort(); assert_eq!(scoped_refusals, ["kurtosis", "wma"]);
+        println!("all {count} indicators: new recurrence proof admits {admitted:?}");
     }
 
     #[test]

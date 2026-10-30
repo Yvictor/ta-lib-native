@@ -2966,7 +2966,13 @@ impl RustStmt<'_, '_> {
             same_len: &same_len,
             ring_storage: &ring_storage,
         };
-        let plan = super::rust_window::plan(condition, body, update, &names)?;
+        let plan = super::rust_window::plan(condition, body, update, &names).or_else(|| {
+            if update.is_none() {
+                super::rust_window::recurrence_plan(condition, body, &names)
+            } else {
+                None
+            }
+        })?;
         // A tested counter steps before the do-while's first test, not its
         // first pass.
         if do_while && plan.cond_step.is_some() {

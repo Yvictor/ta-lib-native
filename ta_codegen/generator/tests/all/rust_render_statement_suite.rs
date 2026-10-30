@@ -2781,6 +2781,30 @@ fn rust_candle_loops_read_their_inputs_through_windows() {
     assert!(seen >= 57, "saw {seen} candlestick functions reading a trailing index");
 }
 
+
+#[test]
+fn rust_recurrence_windows_keep_rebuild_reads_and_scalar_order() {
+    let (func, enums) = load_indicator("var");
+    let rust = backends::rust_lang::generate(&func, &enums, make_registry(), make_helpers());
+    let start = rust.find("pub(crate) fn var_impl(").expect("batch body");
+    let stop = rust.find("    pub fn var(").expect("public batch entry");
+    let batch = &rust[start..stop];
+    assert!(batch.contains("get_mut(outIdx..)") && batch.contains("get(i..)") && batch.contains("get(trailingIdx..)"), "{batch}");
+    let loops = windowed_loop_bodies(batch);
+    assert_eq!(loops.len(), 1, "{batch}");
+    let body = &loops[0];
+    for line in ["tempReal = _w0[_wk] - shift;", "tempReal = _w1[_wk] - shift;", "_w2[_wk] = variance;",
+        "shift = inReal[i];", "tempReal = inReal[windowStart] - shift;", "i += 1;", "outIdx += 1;"] {
+        assert!(body.contains(line), "missing {line}:\n{body}");
+    }
+    assert_eq!(body.matches("inReal[j]").count(), 3, "rebuild reads must stay original: {body}");
+    let order = ["tempReal = _w0[_wk] - shift;", "tempReal = _w1[_wk] - shift;", "trailingIdx += 1;",
+        "barsSinceReseed -= 1;", "windowStart = i - nbInitialElementNeeded;", "_w2[_wk] = variance;", "i += 1;"];
+    let positions: Vec<_> = order.iter().map(|line| body.find(line).expect(line)).collect();
+    assert!(positions.windows(2).all(|p| p[0] < p[1]), "{body}");
+    assert!(batch.contains("tempReal = inReal[trailingIdx] - shift;") && batch.contains("outReal[outIdx] = variance;"), "original fallback missing: {batch}");
+}
+
 /// The bodies of the `for _wk in ...` loops in `rust`.
 fn windowed_loop_bodies(rust: &str) -> Vec<String> {
     let mut out = Vec::new();

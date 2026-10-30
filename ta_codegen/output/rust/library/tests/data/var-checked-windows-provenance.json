@@ -1,0 +1,19 @@
+{
+  "oracle": "official TA-Lib C0.8.3",
+  "C_source_commit": "62021c1d14ef5499505af5547384cab509adf3fc",
+  "C_library_sha256": "5041065b3814d8df0f9238c9c7acc65d66ae0f51c63f376f765322f6273691b8",
+  "cases": 605,
+  "buffer_words": 343358,
+  "written_NaN_policy": "positions; representation excluded",
+  "finite_signed_zero_Infinity_policy": "exact bits",
+  "unwritten_tail_policy": "exact poison bits",
+  "tsv_sha256": "6b666632edea216ae6bc5031085e62b59628d3640ecea5926ed04a4742e00449",
+  "binary_sha256": "df8ce79b3e7dbfcc4258c713188d7065c15210545bb7656bc0d2086a05ef12bb",
+  "generator_sha256": "01895fb4b564eee4b6e7729bd8d541280b6529955e41da1f6e21766d707280f7",
+  "inputs_sha256": "064b0e3b6072634d1a2414c728aa12945810f890bf279e338c9acc29f9f16a50",
+  "Csource_sha256": {
+    "VAR": "bf89b0274e1056e7c79e629c932591df93289af7acf920ad6f4815b057a23fe9",
+    "STDDEV": "8ed42ecf5e1726f1e3d09ff0957a99deeabea5c8d494f7d787b38ce1ba7d5ed1"
+  },
+  "scope": "Selected VAR/STDDEV public batch cases; full untimed43324 native/C matrix and universal237-function runtime gates remain separate evidence; no exhaustive parameter-combination claim."
+}

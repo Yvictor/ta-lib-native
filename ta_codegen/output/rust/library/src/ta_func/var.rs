@@ -214,89 +214,278 @@ impl Core {
         outIdx = 0;
         barsSinceReseed = (32 * optInTimePeriod) as usize;
         peakTotal2 = periodTotal2;
-        loop {
-            // Add the incoming value, measured against the shift.
-            tempReal = inReal[i] - shift;
-            periodTotal1 += tempReal;
-            tempReal *= tempReal;
-            periodTotal2 += tempReal;
-            peakTotal2 = (if periodTotal2 > peakTotal2 { periodTotal2 } else { peakTotal2 });
-            meanValue1 = periodTotal1 * invPeriod;
-            variance = periodTotal2 * invPeriod - meanValue1 * meanValue1;
-            // Remove the trailing value (prepares the next window).
-            tempReal = inReal[trailingIdx] - shift;
-            periodTotal1 -= tempReal;
-            tempReal *= tempReal;
-            periodTotal2 -= tempReal;
-            trailingIdx += 1;
-            // Rebuild with a fresh two-pass when the variance has shrunk below 1e-6
-            // of the LARGEST mean squared deviation held since the last rebuild, or at
-            // least every 32 windows. Measure against that peak, not the current sum:
-            // the rounding the running sums carry scales with the peak, so once a
-            // series settles back near the shift, or an outlier leaves the window,
-            // the current sum holds nothing but that rounding. The collapse is seen
-            // on the first bar whose sums carry it, and the rebuild recomputes that
-            // bar.
-            barsSinceReseed -= 1;
-            if variance < 0.000001 * (peakTotal2 * invPeriod) || barsSinceReseed <= 0 {
-                barsSinceReseed = (32 * optInTimePeriod) as usize;
-                windowStart = i - nbInitialElementNeeded;
-                tempReal = 0.0;
-                for j in (windowStart as usize)..(i as usize) + 1 {
-                    tempReal += inReal[j];
-                }
-                j = (i as usize) + 1;
-                shift = tempReal * invPeriod;
-                periodTotal1 = 0.0;
-                periodTotal2 = 0.0;
-                for j in (windowStart as usize)..(i as usize) + 1 {
-                    tempReal = inReal[j] - shift;
+        if i <= endIdx {
+            let _wn: usize = endIdx - i + 1;
+            if let (Some(_w0), Some(_w1), Some(_w2)) = (inReal.get(i..).and_then(|w| w.get(.._wn)), inReal.get(trailingIdx..).and_then(|w| w.get(.._wn)), outReal.get_mut(outIdx..).and_then(|w| w.get_mut(.._wn))) {
+                let _w0 = &_w0[.._wn];
+                let _w1 = &_w1[.._wn];
+                let _w2 = &mut _w2[.._wn];
+                for _wk in 0.._wn {
+                    // Add the incoming value, measured against the shift.
+                    tempReal = _w0[_wk] - shift;
                     periodTotal1 += tempReal;
                     tempReal *= tempReal;
                     periodTotal2 += tempReal;
+                    peakTotal2 = (if periodTotal2 > peakTotal2 { periodTotal2 } else { peakTotal2 });
+                    meanValue1 = periodTotal1 * invPeriod;
+                    variance = periodTotal2 * invPeriod - meanValue1 * meanValue1;
+                    // Remove the trailing value (prepares the next window).
+                    tempReal = _w1[_wk] - shift;
+                    periodTotal1 -= tempReal;
+                    tempReal *= tempReal;
+                    periodTotal2 -= tempReal;
+                    trailingIdx += 1;
+                    // Rebuild with a fresh two-pass when the variance has shrunk below 1e-6
+                    // of the LARGEST mean squared deviation held since the last rebuild, or at
+                    // least every 32 windows. Measure against that peak, not the current sum:
+                    // the rounding the running sums carry scales with the peak, so once a
+                    // series settles back near the shift, or an outlier leaves the window,
+                    // the current sum holds nothing but that rounding. The collapse is seen
+                    // on the first bar whose sums carry it, and the rebuild recomputes that
+                    // bar.
+                    barsSinceReseed -= 1;
+                    if variance < 0.000001 * (peakTotal2 * invPeriod) || barsSinceReseed <= 0 {
+                        barsSinceReseed = (32 * optInTimePeriod) as usize;
+                        windowStart = i - nbInitialElementNeeded;
+                        tempReal = 0.0;
+                        for j in (windowStart as usize)..(i as usize) + 1 {
+                            tempReal += inReal[j];
+                        }
+                        j = (i as usize) + 1;
+                        shift = tempReal * invPeriod;
+                        periodTotal1 = 0.0;
+                        periodTotal2 = 0.0;
+                        for j in (windowStart as usize)..(i as usize) + 1 {
+                            tempReal = inReal[j] - shift;
+                            periodTotal1 += tempReal;
+                            tempReal *= tempReal;
+                            periodTotal2 += tempReal;
+                        }
+                        j = (i as usize) + 1;
+                        meanValue1 = periodTotal1 * invPeriod;
+                        variance = periodTotal2 * invPeriod - meanValue1 * meanValue1;
+                        // A window flat to within the rounding of its own mean leaves the
+                        // variance at that rounding, which would fire the trigger again on
+                        // every bar. Anchored on one of its own values it cannot: the variance
+                        // is then at least 1/(2n) of the mean square it is extracted from.
+                        if variance < 0.000001 * (periodTotal2 * invPeriod) {
+                            shift = inReal[i];
+                            periodTotal1 = 0.0;
+                            periodTotal2 = 0.0;
+                            for j in (windowStart as usize)..(i as usize) + 1 {
+                                tempReal = inReal[j] - shift;
+                                periodTotal1 += tempReal;
+                                tempReal *= tempReal;
+                                periodTotal2 += tempReal;
+                            }
+                            j = (i as usize) + 1;
+                            meanValue1 = periodTotal1 * invPeriod;
+                            variance = periodTotal2 * invPeriod - meanValue1 * meanValue1;
+                        }
+                        // Before the re-remove below: the peak must hold the whole window.
+                        peakTotal2 = periodTotal2;
+                        // After the re-anchor a window with any spread sits orders above this
+                        // floor, so it catches only a variance that rounding left at or below
+                        // 0. That keeps the output non-negative, which lets STDDEV and BBANDS
+                        // square-root it unconditionally (#243). A negative variance always
+                        // gets here: the peak is never negative, so the trigger fires on it.
+                        if variance < 0.000000000001 * (periodTotal2 * invPeriod) {
+                            variance = 0.0;
+                        }
+                        // Re-remove the trailing value under the new shift so the carried state
+                        // matches the non-reseed path.
+                        tempReal = inReal[windowStart] - shift;
+                        periodTotal1 -= tempReal;
+                        tempReal *= tempReal;
+                        periodTotal2 -= tempReal;
+                    }
+                    _w2[_wk] = variance;
+                    outIdx += 1;
+                    i += 1;
                 }
-                j = (i as usize) + 1;
+            } else {
+                loop {
+                    // Add the incoming value, measured against the shift.
+                    tempReal = inReal[i] - shift;
+                    periodTotal1 += tempReal;
+                    tempReal *= tempReal;
+                    periodTotal2 += tempReal;
+                    peakTotal2 = (if periodTotal2 > peakTotal2 { periodTotal2 } else { peakTotal2 });
+                    meanValue1 = periodTotal1 * invPeriod;
+                    variance = periodTotal2 * invPeriod - meanValue1 * meanValue1;
+                    // Remove the trailing value (prepares the next window).
+                    tempReal = inReal[trailingIdx] - shift;
+                    periodTotal1 -= tempReal;
+                    tempReal *= tempReal;
+                    periodTotal2 -= tempReal;
+                    trailingIdx += 1;
+                    // Rebuild with a fresh two-pass when the variance has shrunk below 1e-6
+                    // of the LARGEST mean squared deviation held since the last rebuild, or at
+                    // least every 32 windows. Measure against that peak, not the current sum:
+                    // the rounding the running sums carry scales with the peak, so once a
+                    // series settles back near the shift, or an outlier leaves the window,
+                    // the current sum holds nothing but that rounding. The collapse is seen
+                    // on the first bar whose sums carry it, and the rebuild recomputes that
+                    // bar.
+                    barsSinceReseed -= 1;
+                    if variance < 0.000001 * (peakTotal2 * invPeriod) || barsSinceReseed <= 0 {
+                        barsSinceReseed = (32 * optInTimePeriod) as usize;
+                        windowStart = i - nbInitialElementNeeded;
+                        tempReal = 0.0;
+                        // for( j = windowStart; j <= i; j += 1 )
+                        j = windowStart;
+                        while j <= i {
+                            tempReal += inReal[j];
+                            j += 1;
+                        }
+                        shift = tempReal * invPeriod;
+                        periodTotal1 = 0.0;
+                        periodTotal2 = 0.0;
+                        // for( j = windowStart; j <= i; j += 1 )
+                        j = windowStart;
+                        while j <= i {
+                            tempReal = inReal[j] - shift;
+                            periodTotal1 += tempReal;
+                            tempReal *= tempReal;
+                            periodTotal2 += tempReal;
+                            j += 1;
+                        }
+                        meanValue1 = periodTotal1 * invPeriod;
+                        variance = periodTotal2 * invPeriod - meanValue1 * meanValue1;
+                        // A window flat to within the rounding of its own mean leaves the
+                        // variance at that rounding, which would fire the trigger again on
+                        // every bar. Anchored on one of its own values it cannot: the variance
+                        // is then at least 1/(2n) of the mean square it is extracted from.
+                        if variance < 0.000001 * (periodTotal2 * invPeriod) {
+                            shift = inReal[i];
+                            periodTotal1 = 0.0;
+                            periodTotal2 = 0.0;
+                            // for( j = windowStart; j <= i; j += 1 )
+                            j = windowStart;
+                            while j <= i {
+                                tempReal = inReal[j] - shift;
+                                periodTotal1 += tempReal;
+                                tempReal *= tempReal;
+                                periodTotal2 += tempReal;
+                                j += 1;
+                            }
+                            meanValue1 = periodTotal1 * invPeriod;
+                            variance = periodTotal2 * invPeriod - meanValue1 * meanValue1;
+                        }
+                        // Before the re-remove below: the peak must hold the whole window.
+                        peakTotal2 = periodTotal2;
+                        // After the re-anchor a window with any spread sits orders above this
+                        // floor, so it catches only a variance that rounding left at or below
+                        // 0. That keeps the output non-negative, which lets STDDEV and BBANDS
+                        // square-root it unconditionally (#243). A negative variance always
+                        // gets here: the peak is never negative, so the trigger fires on it.
+                        if variance < 0.000000000001 * (periodTotal2 * invPeriod) {
+                            variance = 0.0;
+                        }
+                        // Re-remove the trailing value under the new shift so the carried state
+                        // matches the non-reseed path.
+                        tempReal = inReal[windowStart] - shift;
+                        periodTotal1 -= tempReal;
+                        tempReal *= tempReal;
+                        periodTotal2 -= tempReal;
+                    }
+                    outReal[outIdx] = variance;
+                    outIdx += 1;
+                    i += 1;
+                    if !(i <= endIdx) { break; }
+                }
+            }
+        } else {
+            loop {
+                // Add the incoming value, measured against the shift.
+                tempReal = inReal[i] - shift;
+                periodTotal1 += tempReal;
+                tempReal *= tempReal;
+                periodTotal2 += tempReal;
+                peakTotal2 = (if periodTotal2 > peakTotal2 { periodTotal2 } else { peakTotal2 });
                 meanValue1 = periodTotal1 * invPeriod;
                 variance = periodTotal2 * invPeriod - meanValue1 * meanValue1;
-                // A window flat to within the rounding of its own mean leaves the
-                // variance at that rounding, which would fire the trigger again on
-                // every bar. Anchored on one of its own values it cannot: the variance
-                // is then at least 1/(2n) of the mean square it is extracted from.
-                if variance < 0.000001 * (periodTotal2 * invPeriod) {
-                    shift = inReal[i];
+                // Remove the trailing value (prepares the next window).
+                tempReal = inReal[trailingIdx] - shift;
+                periodTotal1 -= tempReal;
+                tempReal *= tempReal;
+                periodTotal2 -= tempReal;
+                trailingIdx += 1;
+                // Rebuild with a fresh two-pass when the variance has shrunk below 1e-6
+                // of the LARGEST mean squared deviation held since the last rebuild, or at
+                // least every 32 windows. Measure against that peak, not the current sum:
+                // the rounding the running sums carry scales with the peak, so once a
+                // series settles back near the shift, or an outlier leaves the window,
+                // the current sum holds nothing but that rounding. The collapse is seen
+                // on the first bar whose sums carry it, and the rebuild recomputes that
+                // bar.
+                barsSinceReseed -= 1;
+                if variance < 0.000001 * (peakTotal2 * invPeriod) || barsSinceReseed <= 0 {
+                    barsSinceReseed = (32 * optInTimePeriod) as usize;
+                    windowStart = i - nbInitialElementNeeded;
+                    tempReal = 0.0;
+                    // for( j = windowStart; j <= i; j += 1 )
+                    j = windowStart;
+                    while j <= i {
+                        tempReal += inReal[j];
+                        j += 1;
+                    }
+                    shift = tempReal * invPeriod;
                     periodTotal1 = 0.0;
                     periodTotal2 = 0.0;
-                    for j in (windowStart as usize)..(i as usize) + 1 {
+                    // for( j = windowStart; j <= i; j += 1 )
+                    j = windowStart;
+                    while j <= i {
                         tempReal = inReal[j] - shift;
                         periodTotal1 += tempReal;
                         tempReal *= tempReal;
                         periodTotal2 += tempReal;
+                        j += 1;
                     }
-                    j = (i as usize) + 1;
                     meanValue1 = periodTotal1 * invPeriod;
                     variance = periodTotal2 * invPeriod - meanValue1 * meanValue1;
+                    // A window flat to within the rounding of its own mean leaves the
+                    // variance at that rounding, which would fire the trigger again on
+                    // every bar. Anchored on one of its own values it cannot: the variance
+                    // is then at least 1/(2n) of the mean square it is extracted from.
+                    if variance < 0.000001 * (periodTotal2 * invPeriod) {
+                        shift = inReal[i];
+                        periodTotal1 = 0.0;
+                        periodTotal2 = 0.0;
+                        // for( j = windowStart; j <= i; j += 1 )
+                        j = windowStart;
+                        while j <= i {
+                            tempReal = inReal[j] - shift;
+                            periodTotal1 += tempReal;
+                            tempReal *= tempReal;
+                            periodTotal2 += tempReal;
+                            j += 1;
+                        }
+                        meanValue1 = periodTotal1 * invPeriod;
+                        variance = periodTotal2 * invPeriod - meanValue1 * meanValue1;
+                    }
+                    // Before the re-remove below: the peak must hold the whole window.
+                    peakTotal2 = periodTotal2;
+                    // After the re-anchor a window with any spread sits orders above this
+                    // floor, so it catches only a variance that rounding left at or below
+                    // 0. That keeps the output non-negative, which lets STDDEV and BBANDS
+                    // square-root it unconditionally (#243). A negative variance always
+                    // gets here: the peak is never negative, so the trigger fires on it.
+                    if variance < 0.000000000001 * (periodTotal2 * invPeriod) {
+                        variance = 0.0;
+                    }
+                    // Re-remove the trailing value under the new shift so the carried state
+                    // matches the non-reseed path.
+                    tempReal = inReal[windowStart] - shift;
+                    periodTotal1 -= tempReal;
+                    tempReal *= tempReal;
+                    periodTotal2 -= tempReal;
                 }
-                // Before the re-remove below: the peak must hold the whole window.
-                peakTotal2 = periodTotal2;
-                // After the re-anchor a window with any spread sits orders above this
-                // floor, so it catches only a variance that rounding left at or below
-                // 0. That keeps the output non-negative, which lets STDDEV and BBANDS
-                // square-root it unconditionally (#243). A negative variance always
-                // gets here: the peak is never negative, so the trigger fires on it.
-                if variance < 0.000000000001 * (periodTotal2 * invPeriod) {
-                    variance = 0.0;
-                }
-                // Re-remove the trailing value under the new shift so the carried state
-                // matches the non-reseed path.
-                tempReal = inReal[windowStart] - shift;
-                periodTotal1 -= tempReal;
-                tempReal *= tempReal;
-                periodTotal2 -= tempReal;
+                outReal[outIdx] = variance;
+                outIdx += 1;
+                i += 1;
+                if !(i <= endIdx) { break; }
             }
-            outReal[outIdx] = variance;
-            outIdx += 1;
-            i += 1;
-            if !(i <= endIdx) { break; }
         }
         // All done. Indicate the output limits and return.
         (*outNBElement) = outIdx;
